@@ -1,0 +1,404 @@
+// barry.ts - a programming language to get lucky
+// A simple parser for parsing expressions into an AST of ideas
+
+// Combined regex pattern for token matching with global flag
+// Order matters: quoted strings, then numbers, then seals, then unquoted strings, then whitespace
+const TOKEN_PATTERN =
+  /(?:"(?<quoted>[^"]*)"|(?<number>-?\d+\.?\d*)|(?<seal>[^\w\s"]+)|(?<string>\S+)|(?<append>\s+))/g
+
+// Main parse function - converts string to Idea tree
+export function Parse(input: string): Idea {
+  const parser = new Parser(input)
+  return parser.start()
+}
+
+// Helper function to display an idea - Lists without parentheses
+export function LineView(idea: Idea): string {
+  if (idea instanceof List) {
+    return idea.LineView()
+  }
+  return idea.View()
+}
+
+// Test function
+export function Test() {
+  console.log("=== Barry Parser Tests ===")
+
+  const testCases = [
+    "1234",
+    "  42.5  ",
+    "-7",
+    "12 34",
+    "12 (34 56) 78",
+    "12s",
+    "12s 34s",
+    "#123",
+    "#12s",
+    "12+34",
+  ]
+
+  for (const input of testCases) {
+    console.log(`\nInput: "${input}"`)
+    try {
+      const result = Parse(input)
+      console.log(`  Result: ${LineView(result)}`)
+    } catch (e) {
+      console.error(`  Error: ${e}`)
+    }
+  }
+
+  console.log("\n=== Tests Complete ===")
+}
+
+// Seal map - maps seal strings to their idea constructors
+const SealMap = new Map<string, () => Idea>([
+  ["(", () => new List()],
+  [")", () => new Closure()],
+  ["#", () => new ID()],
+  ["+", () => new Add()],
+])
+
+// Name map - maps unquoted strings to their idea constructors
+const NameMap = new Map<string, () => Idea>([["s", () => new Second()]])
+
+// Parser extracts tokens on-demand and creates ideas from input string
+class Parser {
+  private regex: RegExp
+
+  constructor(private input: string) {
+    this.regex = new RegExp(TOKEN_PATTERN.source, TOKEN_PATTERN.flags)
+  }
+
+  // Parse a seal string and return the longest matching seal idea
+  // Resets regex index so remaining characters will be matched in next call
+  private parseSeal(sealString: string, matchEndPos: number): Idea {
+    // Try matching from longest to shortest
+    for (let len = sealString.length; len > 0; len--) {
+      const candidate = sealString.substring(0, len)
+      if (SealMap.has(candidate)) {
+        // Found a match, reset index to position after this seal
+        const consumedLength = len
+        this.regex.lastIndex = matchEndPos - sealString.length + consumedLength
+        return SealMap.get(candidate)!()
+      }
+    }
+
+    // No match found - syntax error
+    throw new Error(`Unknown seal: ${sealString[0]}`)
+  }
+
+  // Entry point for parsing - handles root list with special processing
+  start(): Idea {
+    // Create root list
+    const rootList = new List()
+
+    // Append loop: consume ideas until EOF
+    while (true) {
+      const idea = this.next(null, 0)
+      if (idea === null) {
+        break
+      }
+      rootList.append(idea)
+    }
+
+    // Post-processing: convert based on number of items
+    if (rootList.items.length === 0) {
+      // Empty list becomes Nothing
+      return new Nothing()
+    } else if (rootList.items.length === 1) {
+      // Single element: (x) = x
+      return rootList.items[0]
+    }
+    // Multiple elements: return the list
+    return rootList
+  }
+
+  // Get next idea from current position
+  // prev is the idea to the left (can be null)
+  // suitor is the precedence of the left suitor (0 = no suitor, e.g. in append loops)
+  // Returns null if EOF or no valid idea can be created
+  // In look-ahead mode (prev !== null), returns null if idea doesn't need prev as left argument
+  // Rewinds position if returning null
+  next(prev: Idea | null, suitor: number): Idea | null {
+    const savedPos = this.regex.lastIndex
+    const rewind = () => {
+      this.regex.lastIndex = savedPos
+    }
+
+    let match = this.regex.exec(this.input)
+
+    while (match && match.groups?.append !== undefined) {
+      match = this.regex.exec(this.input)
+    }
+
+    if (!match || !match.groups) {
+      rewind()
+      return null
+    }
+
+    let idea: Idea | null = null
+
+    if (match.groups.number !== undefined) {
+      idea = new Num(match.groups.number)
+    } else if (match.groups.quoted !== undefined) {
+      // Create Str idea from quoted string (quotes already removed by regex)
+      idea = new Str(match.groups.quoted)
+    } else if (match.groups.string !== undefined) {
+      // Look up in NameMap, create Str if not found
+      if (NameMap.has(match.groups.string)) {
+        idea = NameMap.get(match.groups.string)!()
+      } else {
+        idea = new Str(match.groups.string)
+      }
+    } else if (match.groups.seal !== undefined) {
+      // Parse seal - may reset index for remaining characters
+      idea = this.parseSeal(match.groups.seal, this.regex.lastIndex)
+    } else {
+      rewind()
+      return null
+    }
+
+    console.log("Created idea:", idea instanceof Closure ? ")" : idea.View())
+
+    // Look-ahead check: if prev is provided, try to consume it
+    if (prev !== null) {
+      // Check precedence: only consume if our precedence is >= suitor
+      if (idea.precedence < suitor) {
+        rewind()
+        return null
+      }
+      const consumed = idea.consumePre(prev)
+      if (consumed === null) {
+        // prev not consumed, return null
+        rewind()
+        return null
+      }
+      // prev consumed, use the returned idea
+      idea = consumed
+    }
+
+    // Handle Closure - return immediately after look-ahead check
+    if (idea instanceof Closure) {
+      return idea
+    }
+
+    // Handle List - run append loop until Closure or EOF
+    if (idea instanceof List) {
+      while (true) {
+        const item = this.next(null, 0)
+        if (item === null) {
+          // EOF - end of list
+          break
+        }
+        if (item instanceof Closure) {
+          // Closure already consumed by next(), exit loop
+          break
+        }
+        idea.append(item)
+      }
+
+      // Post-process: empty list becomes Nothing
+      if (idea.items.length === 0) {
+        idea = new Nothing()
+      }
+    }
+
+    // Fill recursion: if idea has right argument slots, try to fill them
+    if ("consumePost" in idea) {
+      const postPos = this.regex.lastIndex
+      const rewindPost = () => {
+        this.regex.lastIndex = postPos
+      }
+      const nextIdea = this.next(null, idea.precedence)
+      if (nextIdea !== null) {
+        if (!(idea as any).consumePost(nextIdea)) {
+          // Didn't consume, rewind so next idea can be used elsewhere
+          rewindPost()
+        }
+      }
+    }
+
+    // Look-ahead recursion: check if something needs this idea as left argument
+    // Pass the suitor precedence we received, not our own
+    const nextIdea = this.next(idea, suitor)
+    if (nextIdea !== null) {
+      return nextIdea
+    }
+
+    return idea
+  }
+}
+
+// Base class for all ideas (AST nodes)
+export abstract class Idea {
+  precedence: number = 0
+  finished: boolean = false
+  complete: boolean = false // Ideas are incomplete by default
+
+  // Default: ideas don't consume pre (return null)
+  consumePre(prev: Idea): Idea | null {
+    return null
+  }
+
+  abstract View(): string
+}
+
+// Num idea - stores numeric values
+export class Num extends Idea {
+  value: number
+
+  constructor(match: string) {
+    super()
+    this.value = parseFloat(match)
+    this.complete = true
+  }
+
+  View(): string {
+    return this.value.toString()
+  }
+}
+
+// Str idea - stores string values
+export class Str extends Idea {
+  value: string
+
+  constructor(match: string) {
+    super()
+    this.value = match
+    this.complete = true
+  }
+
+  View(): string {
+    return '"' + this.value + '"'
+  }
+}
+
+// List idea - contains sequence of ideas
+export class List extends Idea {
+  items: Idea[] = []
+
+  constructor() {
+    super()
+    this.complete = true
+  }
+
+  append(idea: Idea) {
+    this.items.push(idea)
+  }
+
+  View(): string {
+    return "(" + this.items.map((item) => item.View()).join(" ") + ")"
+  }
+
+  LineView(): string {
+    return this.items.map((item) => item.View()).join(" ")
+  }
+}
+
+// Nothing idea - empty expression
+export class Nothing extends Idea {
+  constructor() {
+    super()
+    this.complete = true
+  }
+
+  View(): string {
+    return "()"
+  }
+}
+
+// Closure idea - closing parenthesis marker (never inserted in AST)
+export class Closure extends Idea {
+  constructor() {
+    super()
+  }
+
+  View(): string {
+    throw new Error("Closure should never appear in AST")
+  }
+}
+
+// ID idea - represents an ID reference (#123)
+export class ID extends Idea {
+  right: Idea | null = null
+
+  constructor() {
+    super()
+    this.precedence = 100
+  }
+
+  consumePost(next: Idea): boolean {
+    if (next instanceof Num && this.right === null) {
+      this.right = next
+      this.complete = true
+      return true
+    }
+    return false
+  }
+
+  View(): string {
+    const rightArg = this.right === null ? "_" : this.right.View()
+    return "#" + rightArg
+  }
+}
+
+// Second idea - extracts second from time value
+export class Second extends Idea {
+  left: Idea | null = null
+
+  constructor() {
+    super()
+    this.precedence = 50
+  }
+
+  consumePre(prev: Idea): Idea | null {
+    if (prev instanceof Num) {
+      this.left = prev
+      this.complete = true
+      return this
+    }
+    return null
+  }
+
+  View(): string {
+    const leftArg = this.left === null ? "_" : this.left.View()
+    return leftArg + "s"
+  }
+}
+
+// Add idea - addition operator
+export class Add extends Idea {
+  left: Idea | null = null
+  right: Idea | null = null
+
+  constructor() {
+    super()
+    this.precedence = 10
+  }
+
+  consumePre(prev: Idea): Idea | null {
+    if (prev instanceof Num) {
+      this.left = prev
+      return this
+    }
+    return null
+  }
+
+  consumePost(next: Idea): boolean {
+    if (next instanceof Num) {
+      this.right = next
+      // Only complete when both left and right are filled
+      if (this.left !== null) {
+        this.complete = true
+      }
+      return true
+    }
+    return false
+  }
+
+  View(): string {
+    const leftArg = this.left === null ? "_" : this.left.View()
+    const rightArg = this.right === null ? "_" : this.right.View()
+    return leftArg + "+" + rightArg
+  }
+}
