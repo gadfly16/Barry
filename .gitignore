@@ -1,0 +1,21 @@
+# Build outputs
+*.js
+*.js.map
+
+# Node modules (if ever used)
+node_modules/
+
+# Editor/IDE
+.vscode/
+.idea/
+.zed/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code (already hidden, but explicit)
+.claude/

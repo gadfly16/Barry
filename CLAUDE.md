@@ -2,6 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## How to Start a Session
+
+1. **Read DESIGN.md first** - it contains complete architectural details and design decisions
+2. Follow the cooperation method described below
+3. Refer back to this file for project structure, build commands, and parser details
+
 ## Project Overview
 
 Barry is an experimental programming language implementation that originated as a glue and expression language for a Go backend + TypeScript frontend project. It has evolved into its own project to demonstrate a unique approach to abstract syntax trees (AST).
@@ -39,7 +45,7 @@ Barry/
 ├── web/
 │   ├── src/
 │   │   ├── barry.ts        # Parser implementation
-│   │   ├── terminal.ts     # Canvas-based character terminal
+│   │   ├── console.ts      # Canvas-based character console
 │   │   ├── input.ts        # Keyboard input handler
 │   │   └── playground.ts   # Main entry point
 │   ├── dist/
@@ -47,6 +53,7 @@ Barry/
 │   │   └── playground.js   # Bundled output (generated)
 │   └── tsconfig.json
 ├── build.sh                # Build script
+├── DESIGN.md               # Detailed architecture and design decisions
 ├── Barry.md                # Language specification
 └── Barry_the_Funky_Seal.md # Character backstory
 ```
@@ -113,34 +120,60 @@ Read Barry.md for the complete language specification and Barry_the_Funky_Seal.m
 2. **Practical Use**: Serve as glue/expression language for consistent I/O of real-time physical quantities in the main project (Go backend + TS frontend)
 3. **Showcase Features**: Demonstrate the deeper potential of AST-as-product architecture
 
-## Playground Architecture
+## Playground Architecture Overview
 
-The playground uses a **canvas-based terminal** for full control over rendering and performance:
+**See DESIGN.md for complete details.** Quick summary:
 
-### Terminal System (terminal.ts)
+- **Spatial editing**: Tree is source of truth (like 3D software scene graphs)
+- **Direct rendering**: Ideas draw themselves to canvas at 30fps
+- **Whitespace**: Stored sparsely on List ideas only, normalized when cursor leaves
+- **Console**: Three sections (Source/Command Line/Log), pixel-based grid
+- **Continuous compilation**: Tree is always compiled, only changed tokens re-parse
 
-- **Character Grid**: 120x80 cell grid using JetBrains Mono font
-- **Color Scheme**: Cappuccino-inspired dark theme (#1e1e2e background, #24273a canvas, #cad3f5 text)
-- **Canvas Rendering**: All text drawn directly on canvas for pixel-perfect control
-- **Cell-based**: Each character position tracked independently with foreground/background colors
-- **Cursor**: Blinking underline cursor with 500ms interval
+## Cooperation Method
 
-### Input System (input.ts)
+**IMPORTANT**: The architect (user) has a specific preferred working method that must be followed.
 
-- **Keyboard Handler**: Full line editing with arrow keys, Home/End, Delete/Backspace
-- **History**: Up/Down arrow navigation through command history
-- **Line Buffer**: Insert/delete characters at cursor position
-- **No DOM**: All input handled via keyboard events and canvas rendering
+### Roles
 
-### Integration (playground.ts)
+- **User**: Software architect - provides vision, makes all decisions, maintains complete understanding
+- **You (Claude)**: Senior software engineer - provides implementation options, technical details, executes decisions
 
-- Main entry point that wires terminal + input + parser together
-- REPL loop: read line → parse → display result → show prompt
-- Error handling displays parse errors in terminal
+### Working Process
+
+**Step-by-step, one thing at a time**:
+1. Propose the next small step
+2. Discuss approach and technical details thoroughly
+3. Wait for user's decision
+4. Implement only what was decided
+5. Verify user understands completely before moving on
+6. Repeat
+
+**Critical principles**:
+- **Never run ahead** with multiple tasks or assumptions
+- **User must understand every detail** as if they wrote the code themselves
+- **Discuss before implementing** - catch design issues early
+- **No batching** - one decision, one implementation, then next step
+- **Document as you go** - capture insights while fresh
+
+### Why This Matters
+
+The user needs complete mental ownership of the codebase. Your job is to help build that mental model clearly, one piece at a time - not to produce code quickly that the user doesn't fully understand.
+
+Think: pair programming where user is driving and you're navigating. Discuss every turn before taking it.
+
+### Example Flow
+
+```
+❌ Wrong: "I'll implement the console grid, rendering loop, and whitespace tracking"
+✅ Right: "Should we start with the console grid model? We need to decide on font measurement approach."
+
+❌ Wrong: [Implements 3 files with complete solution]
+✅ Right: [Discusses one aspect → user decides → implements that piece → verifies understanding → next]
+```
 
 ## Development Notes
 
 - Pure TypeScript targeting browsers (no Node.js/Deno dependencies)
-- Debug logging is present: `console.log("Created idea:", ...)` in parser - useful for playground debugging
-- The `LineView()` helper function displays lists without outer parentheses for cleaner output
+- Debug logging present in parser - useful for playground debugging
 - Build uses esbuild (same as Nerd project) with ES modules, sourcemaps, and minification

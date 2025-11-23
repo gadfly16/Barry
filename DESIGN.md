@@ -17,6 +17,22 @@ The playground breaks from the traditional text→AST→code paradigm. Instead:
 The magic trick: we emulate the familiar text editing experience while actually
 performing tree manipulation.
 
+### The Bigger Picture: Like Every Other Successful Application
+
+Every successful application moved to this model decades ago:
+- **3D software**: Scene graph in memory → render → direct manipulation
+- **Image editors**: Layer tree → render → paint/adjust
+- **Audio DAWs**: Track/effect tree → render → tweak parameters
+- **Spreadsheets**: Cell dependency graph → calculate → edit formulas
+
+**But programming stayed stuck**:
+- Text files on disk
+- Parse on demand
+- Throw away AST
+- Repeat
+
+**Barry breaks this**: The tree is always live, always compiled, always ready - just like scene graphs in 3D software.
+
 ## Console Layout
 
 The console is divided into three logical sections:
@@ -62,15 +78,20 @@ The three sections can be displayed independently:
 
 ## Command Line Behavior
 
+**Command line is independent from source** - it parses in its own context.
+
 When user types in command line and presses Enter:
 
-- **If starts with `!`**: Execute as command (like `!bang .`, `!clear`, etc.)
-- **Otherwise**: Parse line → append to end of source tree
+- **If starts with `!`**: Execute as command that affects tree from outside (like `!bang .`, `!clear`, etc.)
+- **Otherwise**: Parse line independently → append complete expression to end of source tree
 
-After Enter, command line clears and cursor stays at command line (REPL-like
-behavior).
+The command line is **NOT a continuation** of the source above it. This avoids complications with multi-line layout and indentation.
 
-User can then navigate up into source to edit previous lines.
+After Enter, command line clears and cursor stays at command line (REPL-like behavior).
+
+**To continue a multi-line expression**: Navigate up into source and edit there.
+
+**Future enhancement**: Shift+Enter will extend the command line itself for multi-line input.
 
 ## Tree Structure
 
@@ -94,9 +115,35 @@ idea.view(console, mouseX, mouseY, startX, startY) -> Idea | null
 **Each frame**:
 
 1. Recursively call `view()` on visible ideas
-2. Each idea draws itself to canvas
+2. Each idea draws itself to canvas (words/strings in single draw calls)
 3. Recursively renders children
 4. Returns idea under cursor (for click detection)
+
+### Console Grid Model
+
+**Pixel-based character grid**:
+
+```typescript
+// Grid positioning (deterministic mapping)
+charCol = Math.floor(pixelX / charWidth)
+charRow = Math.floor(pixelY / charHeight)
+
+// And reverse
+pixelX = charCol * charWidth
+pixelY = charRow * charHeight
+```
+
+**Font measurement** (JetBrains Mono):
+- Set desired `fontSize` (e.g., 14px)
+- Measure actual `charWidth` from canvas (monospace guarantees all chars same width)
+- Measure actual `charHeight` (ascent + descent)
+- Round to integers for clean pixel grid
+- Add line spacing for readability
+
+**Drawing strategy**:
+- Grid is for positioning and click detection
+- Actual rendering draws whole strings/words in one `fillText()` call
+- Monospace guarantee means "Hello" at (0,0) occupies columns 0-4
 
 ### Performance Optimizations
 
@@ -117,75 +164,93 @@ render
 - Display help in status line based on cursor position
 - Click detection via returned idea-under-cursor
 
-## Edit Line Model
+## Whitespace Model
 
-The key to handling whitespace during editing:
-
-### Concept
-
-- **One active edit line** at a time (where cursor is)
-- **Preserve extra whitespace** inserted during editing on that line only
-- **All other lines** render from tree in standard notation
-- **Tree stays up-to-date** via incremental token parsing
+**Key insight**: Whitespace only makes sense in the context of a List. Atomic ideas (Num, Str) just render themselves.
 
 ### Data Structure
 
+**Extra whitespace is stored sparsely on List ideas only**:
+
 ```typescript
-interface EditState {
-  lineY: number; // Which line is being edited
-  insertedSpaces: Map<number, number>; // column → extra spaces count
+class List extends Idea {
+  items: Idea[]
+
+  // Sparse, sorted array of extra whitespace
+  extraWhitespace: Array<{
+    index: number,      // which item this follows (-1 for leading)
+    spaces: number,     // extra horizontal spaces
+    newlines: number    // extra vertical newlines
+  }> = []
 }
 ```
 
-**Note**: We do NOT store a text buffer. The tree is always the source of truth.
+**Why this is better**:
+- **Memory efficient**: Only stores non-standard whitespace (sparse)
+- **Batch normalization**: Can process entire List at once
+- **Natural fit**: Every line is an implicit List (collapsed by single-element rule if needed)
+- **Clean responsibility**: List handles all layout, atomic ideas never store whitespace
 
-### Behavior
+### Rendering with Whitespace
 
-**While editing a line**:
+**Two-pointer iteration** (items + extraWhitespace in lockstep):
 
-- User types character → parse token immediately → update tree
-- User types space → track in `insertedSpaces` map
-- Edit line renders: standard notation from tree + inserted spaces
-- All other lines: render pure standard notation from tree
+```typescript
+let wsIndex = 0  // pointer into extraWhitespace array
 
-**When cursor moves to different line** (Y position changes):
+for (let i = 0; i < items.length; i++) {
+  renderItem(items[i])  // Atomic idea renders itself
 
-1. Clear `insertedSpaces` (old line now renders without extra spaces)
-2. Set new `editState.lineY` to current cursor Y
-3. Start fresh space tracking for new edit line
-
-**Result**:
-
-- Tree is always up-to-date (no deferred parsing)
-- During editing: extra spaces preserved on edit line only
-- After leaving line: spaces cleared, line renders in pure standard notation
-- Clean separation between "tree state" and "cosmetic spacing state"
-
-### Why This Works
-
-- Only one "dirty" line at a time (simple mental model)
-- No deferred parsing needed - tree updates immediately on each character
-- Tree stays clean (standard notation)
-- User gets familiar text-editing experience with spaces
-- When user types `12 `, the space is tracked but doesn't disappear until cursor
-  moves away
-
-### Example
-
-User on line 5, types: `1`, `2`, space, `3`, `4`
-
+  // Check if next whitespace entry is for this index
+  if (wsIndex < extraWhitespace.length &&
+      extraWhitespace[wsIndex].index === i) {
+    renderWhitespace(extraWhitespace[wsIndex].spaces,
+                     extraWhitespace[wsIndex].newlines)
+    wsIndex++
+  }
+  // Otherwise standard notation spacing (handled by context)
+}
 ```
-After '1': insertedSpaces={}, tree updated with Num(1)
-After '2': insertedSpaces={}, tree updated with Num(12)
-After ' ': insertedSpaces={2: 1}, tree unchanged
-After '3': insertedSpaces={2: 1}, tree has Num(12) and new Num(3)
-After '4': insertedSpaces={2: 1}, tree updated with Num(34)
-Render line 5: "12 34" (space from insertedSpaces)
 
-User moves to line 6:
-Clear insertedSpaces
-Render line 5: "12 34" (pure standard notation, happens to have one space)
+### Normalization Rules
+
+**When cursor leaves a line** (horizontal):
+- Clear all `spaces` entries from `extraWhitespace`
+- Filter: `extraWhitespace = extraWhitespace.filter(w => w.newlines > 0)`
+- Line falls back to standard notation spacing
+
+**When cursor leaves empty line area** (vertical):
+- Clamp all `newlines` entries to max 1
+- `extraWhitespace.forEach(w => w.newlines = Math.min(w.newlines, 1))`
+- At most one empty line between ideas in standard notation
+
+### Empty Line Area Behavior
+
+**Multiple consecutive empty lines** form an "empty line area":
+
+1. **Leaving area** (cursor enters content line) → collapse to 1 newline
+2. **Typing on empty line** (making it non-empty) → collapse surrounding empties
+3. **Deleting all chars from a line** → merges newlines above + below into multi-newline
+
+This creates natural text-editing flow while maintaining standard notation as the default.
+
+### Insertion (Maintaining Sorted Order)
+
+**Sorted insertion** to maintain invariant:
+
+```typescript
+function addWhitespace(index: number, spaces: number, newlines: number) {
+  // Binary search for insertion point
+  const insertPos = extraWhitespace.findIndex(w => w.index > index)
+  if (insertPos === -1) {
+    extraWhitespace.push({index, spaces, newlines})
+  } else {
+    extraWhitespace.splice(insertPos, 0, {index, spaces, newlines})
+  }
+}
 ```
+
+Faster than push-and-resort, maintains sorted invariant for efficient rendering.
 
 ## Spatial Editing
 
@@ -273,6 +338,7 @@ Traditional approach: maintain text buffer → parse → run
 - Text is source of truth
 - Parse on every change or with debouncing
 - AST is derived, temporary
+- **Language servers** parse repeatedly, throw away AST, repeat
 
 Barry approach: maintain tree → render → display text
 
@@ -280,14 +346,21 @@ Barry approach: maintain tree → render → display text
 - Text appearance is derived from tree rendering
 - Editing manipulates tree directly via spatial mapping
 - No intermediate text buffer (except cosmetic spacing)
+- **Continuous incremental compilation**: Only re-parse changed tokens
 
-### Whitespace Strategy
+### Continuous Incremental Compilation
 
-The `insertedSpaces` approach solves a critical problem:
+**Traditional language servers**:
+- Continuously compile code for syntax highlighting and linting
+- Throw away the compilation results
+- Re-compile on every change
 
-- User types: `12 ` (needs space to continue typing next token)
-- Without tracking: space disappears immediately (standard notation has no
-  trailing space)
-- With tracking: space preserved on edit line, disappears when cursor leaves
-- This allows natural text-editing flow while maintaining tree as source of
-  truth
+**Barry approach**:
+- Tree is always live and compiled
+- Syntax highlighting = render the tree (already parsed)
+- Linting/errors = tree properties (always available)
+- Compilation spread across editing time
+- Only changed tokens re-parse (truly incremental)
+- **No separate compile stage** - the tree IS the compiled form
+
+This solves the fundamental problem: language servers do real work during editing, but then discard it. Barry preserves the work.
