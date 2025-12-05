@@ -1,243 +1,173 @@
-// Console renderer using canvas for character display
-// Cappuccino-inspired color scheme with JetBrains Mono
+// Console - Canvas-based 80x24 character grid for Barry playground
+// Line 1-22: Source section
+// Line 23: Status line
+// Line 24: Command line
 
-interface ConsoleConfig {
-  cols: number
-  rows: number
-  fontSize: number
-  fontFamily: string
-  charWidth: number
-  charHeight: number
-  backgroundColor: string
-  foregroundColor: string
+export interface TokenInfo {
+  endIndex: number // End position in text
+  kind: string // Token type (for coloring)
+  color: string // Display color
+  error?: string // Optional error message
 }
 
-interface Cell {
-  char: string
-  fg: string
-  bg: string
-}
+export class Console {
+  private cols = 80
+  private rows = 24
+  private fontSize: number
+  private fontFamily = "JetBrains Mono"
 
-class Console {
+  // Measured character metrics
+  private charWidth: number = 0
+  private charHeight: number = 0
+
+  // Canvas
   private canvas: HTMLCanvasElement
   private ctx: CanvasRenderingContext2D
-  private config: ConsoleConfig
-  private buffer: Cell[][]
-  private cursorX: number = 0
-  private cursorY: number = 0
-  private cursorVisible: boolean = true
-  private cursorBlinkInterval: number | null = null
 
-  constructor(canvasId: string) {
-    this.canvas = document.getElementById(canvasId) as HTMLCanvasElement
-    if (!this.canvas) {
-      throw new Error(`Canvas element with id "${canvasId}" not found`)
+  // Colors
+  private bgColor = "#24273a" // Background
+  private fgColor = "#cad3f5" // Default text
+  private statusBg = "#1e2030" // Status line background
+
+  constructor(canvasId: string, fontSize: number = 14) {
+    this.fontSize = fontSize
+
+    // Get canvas element
+    const canvas = document.getElementById(canvasId)
+    if (!canvas || !(canvas instanceof HTMLCanvasElement)) {
+      throw new Error(`Canvas element "${canvasId}" not found`)
     }
+    this.canvas = canvas
 
+    // Get 2D context
     const ctx = this.canvas.getContext("2d", { alpha: false })
     if (!ctx) {
       throw new Error("Failed to get 2D context")
     }
     this.ctx = ctx
 
-    // Cappuccino-inspired colors
-    this.config = {
-      cols: 120,
-      rows: 80,
-      fontSize: 14,
-      fontFamily: "JetBrains Mono",
-      charWidth: 0, // Will be calculated
-      charHeight: 0, // Will be calculated
-      backgroundColor: "#24273a", // Canvas background (catppuccin-inspired)
-      foregroundColor: "#cad3f5", // Text color (soft white-blue)
-    }
-
     this.initialize()
-    this.buffer = this.createBuffer()
-    this.startCursorBlink()
   }
 
   private initialize(): void {
-    // Measure character dimensions
-    this.ctx.font = `${this.config.fontSize}px ${this.config.fontFamily}`
+    // Set font and measure character dimensions
+    this.ctx.font = `${this.fontSize}px ${this.fontFamily}`
     const metrics = this.ctx.measureText("M")
-    this.config.charWidth = metrics.width
-    // Line height is typically 1.2-1.5 times font size for monospace
-    this.config.charHeight = Math.ceil(this.config.fontSize * 1.5)
+    this.charWidth = metrics.width
+    // Line height is typically 1.5x font size for monospace
+    this.charHeight = Math.ceil(this.fontSize * 1.5)
 
-    // Set canvas size
-    this.canvas.width = this.config.cols * this.config.charWidth
-    this.canvas.height = this.config.rows * this.config.charHeight
+    // Size canvas to fit exactly 80x24 characters
+    this.canvas.width = this.cols * this.charWidth
+    this.canvas.height = this.rows * this.charHeight
 
-    // Configure context
-    this.ctx.font = `${this.config.fontSize}px ${this.config.fontFamily}`
-    this.ctx.textBaseline = "top"
+    // Configure rendering context
+    this.ctx.font = `${this.fontSize}px ${this.fontFamily}`
+    this.ctx.textBaseline = "middle"
     this.ctx.textAlign = "left"
+
+    // Initial clear
+    this.clear()
   }
 
-  private createBuffer(): Cell[][] {
-    const buffer: Cell[][] = []
-    for (let row = 0; row < this.config.rows; row++) {
-      buffer[row] = []
-      for (let col = 0; col < this.config.cols; col++) {
-        buffer[row][col] = {
-          char: " ",
-          fg: this.config.foregroundColor,
-          bg: this.config.backgroundColor,
-        }
-      }
-    }
-    return buffer
-  }
-
-  private startCursorBlink(): void {
-    this.cursorBlinkInterval = window.setInterval(() => {
-      this.cursorVisible = !this.cursorVisible
-      this.renderCursor()
-    }, 500)
-  }
-
-  public clear(): void {
-    this.buffer = this.createBuffer()
-    this.cursorX = 0
-    this.cursorY = 0
-    this.render()
-  }
-
-  public writeChar(char: string, x?: number, y?: number): void {
-    const col = x ?? this.cursorX
-    const row = y ?? this.cursorY
-
-    if (
-      row >= 0 &&
-      row < this.config.rows &&
-      col >= 0 &&
-      col < this.config.cols
-    ) {
-      this.buffer[row][col] = {
-        char: char,
-        fg: this.config.foregroundColor,
-        bg: this.config.backgroundColor,
-      }
-      this.renderCell(col, row)
-    }
-
-    // Auto-advance cursor if using current position
-    if (x === undefined && y === undefined) {
-      this.cursorX++
-      if (this.cursorX >= this.config.cols) {
-        this.cursorX = 0
-        this.cursorY++
-        if (this.cursorY >= this.config.rows) {
-          this.scroll()
-        }
-      }
-    }
-  }
-
-  public write(text: string): void {
-    for (const char of text) {
-      if (char === "\n") {
-        this.cursorX = 0
-        this.cursorY++
-        if (this.cursorY >= this.config.rows) {
-          this.scroll()
-        }
-      } else if (char === "\r") {
-        this.cursorX = 0
-      } else {
-        this.writeChar(char)
-      }
-    }
-    this.renderCursor()
-  }
-
-  public writeLine(text: string): void {
-    this.write(text + "\n")
-  }
-
-  private scroll(): void {
-    // Move all rows up by one
-    for (let row = 0; row < this.config.rows - 1; row++) {
-      this.buffer[row] = this.buffer[row + 1]
-    }
-    // Clear the last row
-    this.buffer[this.config.rows - 1] = []
-    for (let col = 0; col < this.config.cols; col++) {
-      this.buffer[this.config.rows - 1][col] = {
-        char: " ",
-        fg: this.config.foregroundColor,
-        bg: this.config.backgroundColor,
-      }
-    }
-    this.cursorY = this.config.rows - 1
-    this.render()
-  }
-
-  private renderCell(col: number, row: number): void {
-    const cell = this.buffer[row][col]
-    const x = col * this.config.charWidth
-    const y = row * this.config.charHeight
-
-    // Draw background
-    this.ctx.fillStyle = cell.bg
-    this.ctx.fillRect(x, y, this.config.charWidth, this.config.charHeight)
-
-    // Draw character
-    this.ctx.fillStyle = cell.fg
-    this.ctx.fillText(cell.char, x, y)
-  }
-
-  private renderCursor(): void {
-    const x = this.cursorX * this.config.charWidth
-    const y = this.cursorY * this.config.charHeight
-
-    // Redraw the cell at cursor position first
-    this.renderCell(this.cursorX, this.cursorY)
-
-    // Draw cursor if visible
-    if (this.cursorVisible) {
-      this.ctx.fillStyle = this.config.foregroundColor
-      this.ctx.fillRect(
-        x,
-        y + this.config.charHeight - 2,
-        this.config.charWidth,
-        2,
-      )
-    }
-  }
-
-  public render(): void {
-    // Clear canvas
-    this.ctx.fillStyle = this.config.backgroundColor
+  // Clear entire console
+  clear(): void {
+    this.ctx.fillStyle = this.bgColor
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height)
+  }
 
-    // Render all cells
-    for (let row = 0; row < this.config.rows; row++) {
-      for (let col = 0; col < this.config.cols; col++) {
-        this.renderCell(col, row)
-      }
+  // Clear source section (lines 1-22)
+  clearSource(): void {
+    this.ctx.fillStyle = this.bgColor
+    const y = 0
+    const height = 22 * this.charHeight
+    this.ctx.fillRect(0, y, this.canvas.width, height)
+  }
+
+  // Clear status line (line 23)
+  clearStatus(): void {
+    this.ctx.fillStyle = this.statusBg
+    const y = 22 * this.charHeight
+    const height = this.charHeight
+    this.ctx.fillRect(0, y, this.canvas.width, height)
+  }
+
+  // Clear command line (line 24)
+  clearCommand(): void {
+    this.ctx.fillStyle = this.bgColor
+    const y = 23 * this.charHeight
+    const height = this.charHeight
+    this.ctx.fillRect(0, y, this.canvas.width, height)
+  }
+
+  // Draw text starting at console coordinates (col: 0-79, row: 1-24)
+  drawText(text: string, col: number, row: number, color: string): void {
+    if (row < 1 || row > this.rows || col < 0 || col >= this.cols) {
+      return // Out of bounds
     }
 
-    this.renderCursor()
+    const x = col * this.charWidth
+    const y = (row - 1) * this.charHeight + this.charHeight / 2 // Middle of cell
+
+    this.ctx.fillStyle = color
+    this.ctx.fillText(text, x, y)
   }
 
-  public setCursor(x: number, y: number): void {
-    this.cursorX = Math.max(0, Math.min(x, this.config.cols - 1))
-    this.cursorY = Math.max(0, Math.min(y, this.config.rows - 1))
-    this.render()
+  // Draw status line text (always on line 23)
+  drawStatus(text: string): void {
+    this.clearStatus()
+    this.drawText(text, 0, 23, this.fgColor)
   }
 
-  public getCursor(): { x: number; y: number } {
-    return { x: this.cursorX, y: this.cursorY }
-  }
+  // Draw command line with token-based coloring
+  drawCommandLine(text: string, tokens: TokenInfo[], cursorPos: number): void {
+    this.clearCommand()
 
-  public destroy(): void {
-    if (this.cursorBlinkInterval !== null) {
-      clearInterval(this.cursorBlinkInterval)
+    // Draw text with token colors
+    let startIdx = 0
+    for (const token of tokens) {
+      const tokenText = text.slice(startIdx, token.endIndex)
+      this.drawText(tokenText, startIdx, 24, token.color)
+      startIdx = token.endIndex
     }
+
+    // Draw any remaining text
+    if (startIdx < text.length) {
+      this.drawText(text.slice(startIdx), startIdx, 24, this.fgColor)
+    }
+
+    // Draw cursor
+    this.drawCursor(cursorPos, 24)
+  }
+
+  // Draw cursor at position
+  private drawCursor(col: number, row: number): void {
+    if (row < 1 || row > this.rows || col < 0 || col >= this.cols) {
+      return
+    }
+
+    const x = col * this.charWidth
+    const y = row * this.charHeight - 2 // Bottom of cell
+
+    this.ctx.fillStyle = this.fgColor
+    this.ctx.fillRect(x, y, this.charWidth, 2)
+  }
+
+  // Get character dimensions (for DrawContext)
+  getCharWidth(): number {
+    return this.charWidth
+  }
+
+  getCharHeight(): number {
+    return this.charHeight
+  }
+
+  // Get canvas dimensions
+  getCols(): number {
+    return this.cols
+  }
+
+  getRows(): number {
+    return this.rows
   }
 }
-
-// Export for use in other modules
-export { Console }

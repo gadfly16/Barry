@@ -1,4 +1,4 @@
-// barry.ts - a programming language to get lucky
+// barry.ts
 // A simple parser for parsing expressions into an AST of ideas
 
 // Combined regex pattern for token matching with global flag
@@ -30,11 +30,8 @@ export function Test() {
     "-7",
     "12 34",
     "12 (34 56) 78",
-    "12s",
-    "12s 34s",
-    "#123",
-    "#12s",
     "12+34",
+    "1+2+3",
   ]
 
   for (const input of testCases) {
@@ -54,12 +51,11 @@ export function Test() {
 const SealMap = new Map<string, () => Idea>([
   ["(", () => new List()],
   [")", () => new Closure()],
-  ["#", () => new ID()],
   ["+", () => new Add()],
 ])
 
 // Name map - maps unquoted strings to their idea constructors
-const NameMap = new Map<string, () => Idea>([["s", () => new Second()]])
+const NameMap = new Map<string, () => Idea>([])
 
 // Parser extracts tokens on-demand and creates ideas from input string
 class Parser {
@@ -315,54 +311,6 @@ export class Closure extends Idea {
 
   View(): string {
     throw new Error("Closure should never appear in AST")
-  }
-}
-
-// ID idea - represents an ID reference (#123)
-export class ID extends Idea {
-  right: Idea | null = null
-
-  constructor() {
-    super()
-    this.precedence = 100
-  }
-
-  consumePost(next: Idea): boolean {
-    if (next instanceof Num && this.right === null) {
-      this.right = next
-      this.complete = true
-      return true
-    }
-    return false
-  }
-
-  View(): string {
-    const rightArg = this.right === null ? "_" : this.right.View()
-    return "#" + rightArg
-  }
-}
-
-// Second idea - extracts second from time value
-export class Second extends Idea {
-  left: Idea | null = null
-
-  constructor() {
-    super()
-    this.precedence = 50
-  }
-
-  consumePre(prev: Idea): Idea | null {
-    if (prev instanceof Num) {
-      this.left = prev
-      this.complete = true
-      return this
-    }
-    return null
-  }
-
-  View(): string {
-    const leftArg = this.left === null ? "_" : this.left.View()
-    return leftArg + "s"
   }
 }
 

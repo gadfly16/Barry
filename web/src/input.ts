@@ -1,30 +1,28 @@
-// Keyboard input handler for canvas-based console
-
-import { Console } from './console.js'
+// Input handler for console - manages command line input
+import { Console, TokenInfo } from "./console.js"
 
 interface InputConfig {
-  promptSymbol: string
   onSubmit: (line: string) => void
 }
 
-class InputHandler {
+export class InputHandler {
   private console: Console
   private config: InputConfig
-  private currentLine: string = ''
+  private prompt = "(_*_) "
+  private currentLine: string = ""
   private cursorPosition: number = 0
-  private promptLength: number = 0
   private history: string[] = []
   private historyIndex: number = -1
 
   constructor(console: Console, config: InputConfig) {
     this.console = console
     this.config = config
-    this.promptLength = config.promptSymbol.length
     this.setupKeyboardListeners()
+    this.redraw()
   }
 
   private setupKeyboardListeners(): void {
-    document.addEventListener('keydown', (e) => {
+    document.addEventListener("keydown", (e) => {
       this.handleKeyDown(e)
     })
   }
@@ -32,46 +30,47 @@ class InputHandler {
   private handleKeyDown(e: KeyboardEvent): void {
     // Prevent default browser behavior for keys we handle
     const handledKeys = [
-      'Enter',
-      'Backspace',
-      'ArrowLeft',
-      'ArrowRight',
-      'ArrowUp',
-      'ArrowDown',
-      'Home',
-      'End',
-      'Delete',
+      "Enter",
+      "Backspace",
+      "ArrowLeft",
+      "ArrowRight",
+      "ArrowUp",
+      "ArrowDown",
+      "Home",
+      "End",
+      "Delete",
+      " ",
     ]
     if (handledKeys.includes(e.key)) {
       e.preventDefault()
     }
 
     switch (e.key) {
-      case 'Enter':
+      case "Enter":
         this.handleSubmit()
         break
-      case 'Backspace':
+      case "Backspace":
         this.handleBackspace()
         break
-      case 'Delete':
+      case "Delete":
         this.handleDelete()
         break
-      case 'ArrowLeft':
+      case "ArrowLeft":
         this.handleArrowLeft()
         break
-      case 'ArrowRight':
+      case "ArrowRight":
         this.handleArrowRight()
         break
-      case 'ArrowUp':
+      case "ArrowUp":
         this.handleArrowUp()
         break
-      case 'ArrowDown':
+      case "ArrowDown":
         this.handleArrowDown()
         break
-      case 'Home':
+      case "Home":
         this.handleHome()
         break
-      case 'End':
+      case "End":
         this.handleEnd()
         break
       default:
@@ -90,7 +89,7 @@ class InputHandler {
       char +
       this.currentLine.slice(this.cursorPosition)
     this.cursorPosition++
-    this.redrawLine()
+    this.redraw()
   }
 
   private handleBackspace(): void {
@@ -99,7 +98,7 @@ class InputHandler {
         this.currentLine.slice(0, this.cursorPosition - 1) +
         this.currentLine.slice(this.cursorPosition)
       this.cursorPosition--
-      this.redrawLine()
+      this.redraw()
     }
   }
 
@@ -108,21 +107,21 @@ class InputHandler {
       this.currentLine =
         this.currentLine.slice(0, this.cursorPosition) +
         this.currentLine.slice(this.cursorPosition + 1)
-      this.redrawLine()
+      this.redraw()
     }
   }
 
   private handleArrowLeft(): void {
     if (this.cursorPosition > 0) {
       this.cursorPosition--
-      this.updateCursorPosition()
+      this.redraw()
     }
   }
 
   private handleArrowRight(): void {
     if (this.cursorPosition < this.currentLine.length) {
       this.cursorPosition++
-      this.updateCursorPosition()
+      this.redraw()
     }
   }
 
@@ -137,7 +136,7 @@ class InputHandler {
 
     this.currentLine = this.history[this.historyIndex]
     this.cursorPosition = this.currentLine.length
-    this.redrawLine()
+    this.redraw()
   }
 
   private handleArrowDown(): void {
@@ -148,21 +147,21 @@ class InputHandler {
       this.currentLine = this.history[this.historyIndex]
     } else {
       this.historyIndex = -1
-      this.currentLine = ''
+      this.currentLine = ""
     }
 
     this.cursorPosition = this.currentLine.length
-    this.redrawLine()
+    this.redraw()
   }
 
   private handleHome(): void {
     this.cursorPosition = 0
-    this.updateCursorPosition()
+    this.redraw()
   }
 
   private handleEnd(): void {
     this.cursorPosition = this.currentLine.length
-    this.updateCursorPosition()
+    this.redraw()
   }
 
   private handleSubmit(): void {
@@ -174,45 +173,36 @@ class InputHandler {
       this.historyIndex = -1
     }
 
-    // Move to next line
-    this.console.write('\n')
-
     // Call the submit callback
     this.config.onSubmit(line)
 
     // Reset input state
-    this.currentLine = ''
+    this.currentLine = ""
     this.cursorPosition = 0
-
-    // Show new prompt
-    this.showPrompt()
+    this.redraw()
   }
 
-  private redrawLine(): void {
-    const cursor = this.console.getCursor()
-    const lineY = cursor.y
+  private redraw(): void {
+    // For now, no token coloring - just display text
+    // TODO: Parse and generate tokens for syntax highlighting
+    const tokens: TokenInfo[] = []
 
-    // Clear the current line from prompt onwards
-    this.console.setCursor(this.promptLength, lineY)
-    const clearText = ' '.repeat(120 - this.promptLength)
-    this.console.write(clearText)
+    // Build full command line text with prompt
+    const fullText = this.prompt + this.currentLine
+    const cursorCol = this.prompt.length + this.cursorPosition
 
-    // Redraw the line content
-    this.console.setCursor(this.promptLength, lineY)
-    this.console.write(this.currentLine)
-
-    // Position cursor
-    this.updateCursorPosition()
+    this.console.drawCommandLine(fullText, tokens, cursorCol)
   }
 
-  private updateCursorPosition(): void {
-    const cursor = this.console.getCursor()
-    this.console.setCursor(this.promptLength + this.cursorPosition, cursor.y)
+  // Update display after external changes (e.g., parser feedback)
+  updateDisplay(tokens: TokenInfo[]): void {
+    const fullText = this.prompt + this.currentLine
+    const cursorCol = this.prompt.length + this.cursorPosition
+    this.console.drawCommandLine(fullText, tokens, cursorCol)
   }
 
-  public showPrompt(): void {
-    this.console.write(this.config.promptSymbol)
+  // Get current input text (for external parsing)
+  getCurrentLine(): string {
+    return this.currentLine
   }
 }
-
-export { InputHandler }

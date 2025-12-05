@@ -1,15 +1,10 @@
-// Barry Playground - Main entry point
+// Barry Playground - Main entry point (v0.1.0)
 import { Console } from "./console.js"
 import { InputHandler } from "./input.js"
 import { Parse, LineView } from "./barry.js"
 
-function handleInput(
-  line: string,
-  con: Console,
-  input: InputHandler,
-): void {
+function handleInput(line: string, con: Console): void {
   if (!line.trim()) {
-    input.showPrompt()
     return
   }
 
@@ -17,19 +12,16 @@ function handleInput(
     // Parse the input
     const result = Parse(line)
 
-    // Display the result
+    // For now, just show result in status line
     const output = LineView(result)
-    con.writeLine(output)
+    con.drawStatus(output)
   } catch (error) {
-    // Display error
-    con.writeLine("Error: " + (error as Error).message)
+    // Display error in status line
+    con.drawStatus("Error: " + (error as Error).message)
   }
-
-  // Show new prompt
-  input.showPrompt()
 }
 
-// Wait for JetBrains Mono font to load before initializing console
+// Wait for JetBrains Mono font to load before initializing
 async function initPlayground() {
   try {
     // Load JetBrains Mono font
@@ -39,25 +31,18 @@ async function initPlayground() {
     console.error("Failed to load font:", error)
   }
 
-  // Initialize console
-  const con = new Console("terminal-canvas")
-  con.clear()
-
-  // Welcome message
-  con.writeLine("Barry - A Programming Language to Get Lucky")
-  con.writeLine("(_*_) ")
-  con.writeLine("")
+  // Initialize console (80x24)
+  const con = new Console("terminal-canvas", 14)
 
   // Initialize input handler
   const input = new InputHandler(con, {
-    promptSymbol: "> ",
     onSubmit: (line: string) => {
-      handleInput(line, con, input)
+      handleInput(line, con)
     },
   })
 
-  // Show initial prompt
-  input.showPrompt()
+  // Initial status message
+  con.drawStatus("Barry v0.1.0 - Ready")
 }
 
 // Start when DOM is ready
