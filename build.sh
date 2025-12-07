@@ -9,6 +9,6 @@ cd web && npx tsc --noEmit
 
 echo "Bundling with esbuild..."
 cd ..
-npx esbuild ./web/src/playground.ts --bundle --format=esm --outfile=./web/dist/playground.js --sourcemap --minify --tree-shaking=false
+npx esbuild ./web/src/playground.ts --bundle --format=esm --outfile=./web/dist/playground.js --sourcemap --tree-shaking=false
 
 echo "Build complete! Open web/dist/index.html in your browser."

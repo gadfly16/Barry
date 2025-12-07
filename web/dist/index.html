@@ -1,37 +1,40 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Barry - A Programming Language to Get Lucky</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Barry - A Programming Language to Get Lucky</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap"
+            rel="stylesheet"
+        />
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
 
-        body {
-            background-color: #1e1e2e;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            font-family: 'JetBrains Mono', monospace;
-        }
+            body {
+                background-color: #1e1e2e;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+                font-family: "JetBrains Mono", monospace;
+            }
 
-        #terminal-canvas {
-            background-color: #24273a;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-            cursor: text;
-        }
-    </style>
-</head>
-<body>
-    <canvas id="terminal-canvas"></canvas>
-    <script type="module" src="playground.js"></script>
-</body>
+            #terminal-canvas {
+                background-color: #24273a;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+                cursor: text;
+            }
+        </style>
+    </head>
+    <body>
+        <canvas id="console-canvas"></canvas>
+        <script type="module" src="playground.js"></script>
+    </body>
 </html>

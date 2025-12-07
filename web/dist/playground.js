@@ -1,4 +1,620 @@
-var d=class{cols=80;rows=24;fontSize;fontFamily="JetBrains Mono";charWidth=0;charHeight=0;canvas;ctx;bgColor="#24273a";fgColor="#cad3f5";statusBg="#1e2030";constructor(t,e=14){this.fontSize=e;let s=document.getElementById(t);if(!s||!(s instanceof HTMLCanvasElement))throw new Error(`Canvas element "${t}" not found`);this.canvas=s;let o=this.canvas.getContext("2d",{alpha:!1});if(!o)throw new Error("Failed to get 2D context");this.ctx=o,this.initialize()}initialize(){this.ctx.font=`${this.fontSize}px ${this.fontFamily}`;let t=this.ctx.measureText("M");this.charWidth=t.width,this.charHeight=Math.ceil(this.fontSize*1.5),this.canvas.width=this.cols*this.charWidth,this.canvas.height=this.rows*this.charHeight,this.ctx.font=`${this.fontSize}px ${this.fontFamily}`,this.ctx.textBaseline="middle",this.ctx.textAlign="left",this.clear()}clear(){this.ctx.fillStyle=this.bgColor,this.ctx.fillRect(0,0,this.canvas.width,this.canvas.height)}clearSource(){this.ctx.fillStyle=this.bgColor;let t=0,e=22*this.charHeight;this.ctx.fillRect(0,t,this.canvas.width,e)}clearStatus(){this.ctx.fillStyle=this.statusBg;let t=22*this.charHeight,e=this.charHeight;this.ctx.fillRect(0,t,this.canvas.width,e)}clearCommand(){this.ctx.fillStyle=this.bgColor;let t=23*this.charHeight,e=this.charHeight;this.ctx.fillRect(0,t,this.canvas.width,e)}drawText(t,e,s,o){if(s<1||s>this.rows||e<0||e>=this.cols)return;let n=e*this.charWidth,i=(s-1)*this.charHeight+this.charHeight/2;this.ctx.fillStyle=o,this.ctx.fillText(t,n,i)}drawStatus(t){this.clearStatus(),this.drawText(t,0,23,this.fgColor)}drawCommandLine(t,e,s){this.clearCommand();let o=0;for(let n of e){let i=t.slice(o,n.endIndex);this.drawText(i,o,24,n.color),o=n.endIndex}o<t.length&&this.drawText(t.slice(o),o,24,this.fgColor),this.drawCursor(s,24)}drawCursor(t,e){if(e<1||e>this.rows||t<0||t>=this.cols)return;let s=t*this.charWidth,o=e*this.charHeight-2;this.ctx.fillStyle=this.fgColor,this.ctx.fillRect(s,o,this.charWidth,2)}getCharWidth(){return this.charWidth}getCharHeight(){return this.charHeight}getCols(){return this.cols}getRows(){return this.rows}};var p=class{console;config;prompt="(_*_) ";currentLine="";cursorPosition=0;history=[];historyIndex=-1;constructor(t,e){this.console=t,this.config=e,this.setupKeyboardListeners(),this.redraw()}setupKeyboardListeners(){document.addEventListener("keydown",t=>{this.handleKeyDown(t)})}handleKeyDown(t){switch(["Enter","Backspace","ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Home","End","Delete"," "].includes(t.key)&&t.preventDefault(),t.key){case"Enter":this.handleSubmit();break;case"Backspace":this.handleBackspace();break;case"Delete":this.handleDelete();break;case"ArrowLeft":this.handleArrowLeft();break;case"ArrowRight":this.handleArrowRight();break;case"ArrowUp":this.handleArrowUp();break;case"ArrowDown":this.handleArrowDown();break;case"Home":this.handleHome();break;case"End":this.handleEnd();break;default:t.key.length===1&&!t.ctrlKey&&!t.metaKey&&!t.altKey&&this.handleCharacterInput(t.key);break}}handleCharacterInput(t){this.currentLine=this.currentLine.slice(0,this.cursorPosition)+t+this.currentLine.slice(this.cursorPosition),this.cursorPosition++,this.redraw()}handleBackspace(){this.cursorPosition>0&&(this.currentLine=this.currentLine.slice(0,this.cursorPosition-1)+this.currentLine.slice(this.cursorPosition),this.cursorPosition--,this.redraw())}handleDelete(){this.cursorPosition<this.currentLine.length&&(this.currentLine=this.currentLine.slice(0,this.cursorPosition)+this.currentLine.slice(this.cursorPosition+1),this.redraw())}handleArrowLeft(){this.cursorPosition>0&&(this.cursorPosition--,this.redraw())}handleArrowRight(){this.cursorPosition<this.currentLine.length&&(this.cursorPosition++,this.redraw())}handleArrowUp(){this.history.length!==0&&(this.historyIndex===-1?this.historyIndex=this.history.length-1:this.historyIndex>0&&this.historyIndex--,this.currentLine=this.history[this.historyIndex],this.cursorPosition=this.currentLine.length,this.redraw())}handleArrowDown(){this.historyIndex!==-1&&(this.historyIndex<this.history.length-1?(this.historyIndex++,this.currentLine=this.history[this.historyIndex]):(this.historyIndex=-1,this.currentLine=""),this.cursorPosition=this.currentLine.length,this.redraw())}handleHome(){this.cursorPosition=0,this.redraw()}handleEnd(){this.cursorPosition=this.currentLine.length,this.redraw()}handleSubmit(){let t=this.currentLine;t.trim().length>0&&(this.history.push(t),this.historyIndex=-1),this.config.onSubmit(t),this.currentLine="",this.cursorPosition=0,this.redraw()}redraw(){let t=[],e=this.prompt+this.currentLine,s=this.prompt.length+this.cursorPosition;this.console.drawCommandLine(e,t,s)}updateDisplay(t){let e=this.prompt+this.currentLine,s=this.prompt.length+this.cursorPosition;this.console.drawCommandLine(e,t,s)}getCurrentLine(){return this.currentLine}};var I=/(?:"(?<quoted>[^"]*)"|(?<number>-?\d+\.?\d*)|(?<seal>[^\w\s"]+)|(?<string>\S+)|(?<append>\s+))/g;function x(r){return new w(r).start()}function v(r){return r instanceof c?r.LineView():r.View()}function R(){console.log("=== Barry Parser Tests ===");let r=["1234","  42.5  ","-7","12 34","12 (34 56) 78","12+34","1+2+3"];for(let t of r){console.log(`
-Input: "${t}"`);try{let e=x(t);console.log(`  Result: ${v(e)}`)}catch(e){console.error(`  Error: ${e}`)}}console.log(`
-=== Tests Complete ===`)}var L=new Map([["(",()=>new c],[")",()=>new l],["+",()=>new m]]),C=new Map([]),w=class{constructor(t){this.input=t;this.regex=new RegExp(I.source,I.flags)}regex;parseSeal(t,e){for(let s=t.length;s>0;s--){let o=t.substring(0,s);if(L.has(o)){let n=s;return this.regex.lastIndex=e-t.length+n,L.get(o)()}}throw new Error(`Unknown seal: ${t[0]}`)}start(){let t=new c;for(;;){let e=this.next(null,0);if(e===null)break;t.append(e)}return t.items.length===0?new f:t.items.length===1?t.items[0]:t}next(t,e){let s=this.regex.lastIndex,o=()=>{this.regex.lastIndex=s},n=this.regex.exec(this.input);for(;n&&n.groups?.append!==void 0;)n=this.regex.exec(this.input);if(!n||!n.groups)return o(),null;let i=null;if(n.groups.number!==void 0)i=new u(n.groups.number);else if(n.groups.quoted!==void 0)i=new g(n.groups.quoted);else if(n.groups.string!==void 0)C.has(n.groups.string)?i=C.get(n.groups.string)():i=new g(n.groups.string);else if(n.groups.seal!==void 0)i=this.parseSeal(n.groups.seal,this.regex.lastIndex);else return o(),null;if(console.log("Created idea:",i instanceof l?")":i.View()),t!==null){if(i.precedence<e)return o(),null;let h=i.consumePre(t);if(h===null)return o(),null;i=h}if(i instanceof l)return i;if(i instanceof c){for(;;){let h=this.next(null,0);if(h===null||h instanceof l)break;i.append(h)}i.items.length===0&&(i=new f)}if("consumePost"in i){let h=this.regex.lastIndex,k=()=>{this.regex.lastIndex=h},b=this.next(null,i.precedence);b!==null&&(i.consumePost(b)||k())}let y=this.next(i,e);return y!==null?y:i}},a=class{precedence=0;finished=!1;complete=!1;consumePre(t){return null}},u=class extends a{value;constructor(t){super(),this.value=parseFloat(t),this.complete=!0}View(){return this.value.toString()}},g=class extends a{value;constructor(t){super(),this.value=t,this.complete=!0}View(){return'"'+this.value+'"'}},c=class extends a{items=[];constructor(){super(),this.complete=!0}append(t){this.items.push(t)}View(){return"("+this.items.map(t=>t.View()).join(" ")+")"}LineView(){return this.items.map(t=>t.View()).join(" ")}},f=class extends a{constructor(){super(),this.complete=!0}View(){return"()"}},l=class extends a{constructor(){super()}View(){throw new Error("Closure should never appear in AST")}},m=class extends a{left=null;right=null;constructor(){super(),this.precedence=10}consumePre(t){return t instanceof u?(this.left=t,this):null}consumePost(t){return t instanceof u?(this.right=t,this.left!==null&&(this.complete=!0),!0):!1}View(){let t=this.left===null?"_":this.left.View(),e=this.right===null?"_":this.right.View();return t+"+"+e}};function S(r,t){if(r.trim())try{let e=x(r),s=v(e);t.drawStatus(s)}catch(e){t.drawStatus("Error: "+e.message)}}async function P(){try{await document.fonts.load('14px "JetBrains Mono"'),console.log("JetBrains Mono font loaded")}catch(e){console.error("Failed to load font:",e)}let r=new d("terminal-canvas",14),t=new p(r,{onSubmit:e=>{S(e,r)}});r.drawStatus("Barry v0.1.0 - Ready")}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",P):P();
+// web/src/barry.ts
+var TOKEN_PATTERN = /(?:"(?<quoted>[^"]*)"|(?<number>-?\d+\.?\d*)|(?<seal>[^\w\s"]+)|(?<string>\S+)|(?<append>\s+))/g;
+function LineView(idea) {
+  if (idea instanceof List) {
+    return idea.LineView();
+  }
+  return idea.View();
+}
+function Test() {
+  console.log("=== Barry Parser Tests ===");
+  const testCases = [
+    "1234",
+    "  42.5  ",
+    "-7",
+    "12 34",
+    "12 (34 56) 78",
+    "12+34",
+    "1+2+3"
+  ];
+  const parser = new Parser();
+  for (const input of testCases) {
+    console.log(`
+Input: "${input}"`);
+    try {
+      const result = parser.start(input);
+      console.log(`  Result: ${LineView(result)}`);
+    } catch (e) {
+      console.error(`  Error: ${e}`);
+    }
+  }
+  console.log("\n=== Tests Complete ===");
+}
+var SealMap = /* @__PURE__ */ new Map([
+  ["(", () => new List()],
+  [")", () => new Closure()],
+  ["+", () => new Add()]
+]);
+var NameMap = /* @__PURE__ */ new Map([]);
+var Parser = class {
+  regex;
+  input = "";
+  tokens = [];
+  constructor() {
+    this.regex = new RegExp(TOKEN_PATTERN.source, TOKEN_PATTERN.flags);
+  }
+  // Parse a seal string and return the longest matching seal idea
+  // Resets regex index so remaining characters will be matched in next call
+  parseSeal(sealString, matchEndPos) {
+    for (let len = sealString.length; len > 0; len--) {
+      const candidate = sealString.substring(0, len);
+      if (SealMap.has(candidate)) {
+        const consumedLength = len;
+        this.regex.lastIndex = matchEndPos - sealString.length + consumedLength;
+        return SealMap.get(candidate)();
+      }
+    }
+    const errorIdea = new ErrorIdea(`Unknown seal: ${sealString[0]}`);
+    this.tokens.push({
+      endIndex: matchEndPos,
+      idea: errorIdea
+    });
+    return errorIdea;
+  }
+  // Entry point for parsing - handles root list with special processing
+  start(input) {
+    this.input = input;
+    this.regex.lastIndex = 0;
+    this.tokens = [];
+    const rootList = new List();
+    while (true) {
+      const idea = this.next(null, 0);
+      if (idea === null) {
+        break;
+      }
+      rootList.append(idea);
+    }
+    if (rootList.items.length === 0) {
+      return new Nothing();
+    } else if (rootList.items.length === 1) {
+      return rootList.items[0];
+    }
+    return rootList;
+  }
+  // Get next idea from current position
+  // prev is the idea to the left (can be null)
+  // suitor is the precedence of the left suitor (0 = no suitor, e.g. in append loops)
+  // Returns null if EOF or no valid idea can be created
+  // In look-ahead mode (prev !== null), returns null if idea doesn't need prev as left argument
+  // Rewinds position if returning null
+  next(prev, suitor) {
+    const savedPos = this.regex.lastIndex;
+    const savedTokenCount = this.tokens.length;
+    const rewind = () => {
+      this.regex.lastIndex = savedPos;
+      this.tokens.length = savedTokenCount;
+    };
+    let match = this.regex.exec(this.input);
+    while (match && match.groups?.append !== void 0) {
+      match = this.regex.exec(this.input);
+    }
+    if (!match || !match.groups) {
+      rewind();
+      return null;
+    }
+    let idea = null;
+    if (match.groups.number !== void 0) {
+      idea = new Num(match.groups.number);
+    } else if (match.groups.quoted !== void 0) {
+      idea = new Str(match.groups.quoted);
+    } else if (match.groups.string !== void 0) {
+      if (NameMap.has(match.groups.string)) {
+        idea = NameMap.get(match.groups.string)();
+      } else {
+        idea = new Str(match.groups.string);
+      }
+    } else if (match.groups.seal !== void 0) {
+      idea = this.parseSeal(match.groups.seal, this.regex.lastIndex);
+      if (idea instanceof ErrorIdea) {
+        return null;
+      }
+    } else {
+      rewind();
+      return null;
+    }
+    if (!(idea instanceof Closure)) {
+      this.tokens.push({
+        endIndex: this.regex.lastIndex,
+        idea
+      });
+    }
+    console.log("Created idea:", idea instanceof Closure ? ")" : idea.View());
+    if (prev !== null) {
+      if (idea.precedence < suitor) {
+        rewind();
+        return null;
+      }
+      const consumed = idea.consumePre(prev);
+      if (consumed === null) {
+        rewind();
+        return null;
+      }
+      idea = consumed;
+    }
+    if (idea instanceof Closure) {
+      return idea;
+    }
+    if (idea instanceof List) {
+      while (true) {
+        const item = this.next(null, 0);
+        if (item === null) {
+          break;
+        }
+        if (item instanceof Closure) {
+          this.tokens.push({
+            endIndex: this.regex.lastIndex,
+            idea
+          });
+          break;
+        }
+        idea.append(item);
+      }
+      if (idea.items.length === 0) {
+        idea = new Nothing();
+      }
+    }
+    if ("consumePost" in idea) {
+      const postPos = this.regex.lastIndex;
+      const rewindPost = () => {
+        this.regex.lastIndex = postPos;
+      };
+      const nextIdea2 = this.next(null, idea.precedence);
+      if (nextIdea2 !== null) {
+        if (!idea.consumePost(nextIdea2)) {
+          rewindPost();
+        }
+      }
+    }
+    const nextIdea = this.next(idea, suitor);
+    if (nextIdea !== null) {
+      return nextIdea;
+    }
+    return idea;
+  }
+};
+var Idea = class {
+  precedence = 0;
+  finished = false;
+  complete = false;
+  // Ideas are incomplete by default
+  // Default: ideas don't consume pre (return null)
+  consumePre(prev) {
+    return null;
+  }
+};
+var ErrorIdea = class extends Idea {
+  message;
+  constructor(message) {
+    super();
+    this.message = message;
+    this.complete = true;
+  }
+  View() {
+    return `Error: ${this.message}`;
+  }
+  Color() {
+    return "#fc4b28";
+  }
+};
+var Num = class extends Idea {
+  value;
+  constructor(match) {
+    super();
+    this.value = parseFloat(match);
+    this.complete = true;
+  }
+  View() {
+    return this.value.toString();
+  }
+  Color() {
+    return "#a6da95";
+  }
+};
+var Str = class extends Idea {
+  value;
+  constructor(match) {
+    super();
+    this.value = match;
+    this.complete = true;
+  }
+  View() {
+    return '"' + this.value + '"';
+  }
+  Color() {
+    return "#eed49f";
+  }
+};
+var List = class extends Idea {
+  items = [];
+  constructor() {
+    super();
+    this.complete = true;
+  }
+  append(idea) {
+    this.items.push(idea);
+  }
+  View() {
+    return "(" + this.items.map((item) => item.View()).join(" ") + ")";
+  }
+  LineView() {
+    return this.items.map((item) => item.View()).join(" ");
+  }
+  Color() {
+    return "#5da4f4";
+  }
+};
+var Nothing = class extends Idea {
+  constructor() {
+    super();
+    this.complete = true;
+  }
+  View() {
+    return "()";
+  }
+  Color() {
+    return "#7dc4e4";
+  }
+};
+var Closure = class extends Idea {
+  constructor() {
+    super();
+  }
+  View() {
+    throw new Error("Closure should never appear in AST");
+  }
+  Color() {
+    return "#ff00ff";
+  }
+};
+var Add = class extends Idea {
+  left = null;
+  right = null;
+  constructor() {
+    super();
+    this.precedence = 10;
+  }
+  consumePre(prev) {
+    if (prev instanceof Num) {
+      this.left = prev;
+      return this;
+    }
+    return null;
+  }
+  consumePost(next) {
+    if (next instanceof Num) {
+      this.right = next;
+      if (this.left !== null) {
+        this.complete = true;
+      }
+      return true;
+    }
+    return false;
+  }
+  View() {
+    const leftArg = this.left === null ? "_" : this.left.View();
+    const rightArg = this.right === null ? "_" : this.right.View();
+    return leftArg + "+" + rightArg;
+  }
+  Color() {
+    return "#c680f6";
+  }
+};
+
+// web/src/console.ts
+var Console = class {
+  cols = 80;
+  rows = 24;
+  fontSize;
+  fontFamily = "JetBrains Mono";
+  // Measured character metrics
+  charWidth = 0;
+  charHeight = 0;
+  // Canvas
+  canvas;
+  ctx;
+  // Colors
+  bgColor = "#24273a";
+  // Background
+  fgColor = "#cad3f5";
+  // Default text
+  statusBg = "#1e2030";
+  // Status line background
+  // Parser
+  parser = new Parser();
+  // Command line input state
+  prompt = "(_*_) ";
+  currentLine = "";
+  cursorPosition = 0;
+  history = [];
+  historyIndex = -1;
+  constructor(canvasId, fontSize) {
+    this.fontSize = fontSize;
+    const canvas = document.getElementById(canvasId);
+    if (!canvas || !(canvas instanceof HTMLCanvasElement)) {
+      throw new Error(`Canvas element "${canvasId}" not found`);
+    }
+    this.canvas = canvas;
+    const ctx = this.canvas.getContext("2d", { alpha: false });
+    if (!ctx) {
+      throw new Error("Failed to get 2D context");
+    }
+    this.ctx = ctx;
+    this.initialize();
+    this.setupKeyboardListeners();
+    this.redrawCommandLine();
+  }
+  initialize() {
+    this.ctx.font = `${this.fontSize}px ${this.fontFamily}`;
+    const metrics = this.ctx.measureText("M");
+    this.charWidth = metrics.width;
+    this.charHeight = Math.ceil(this.fontSize * 1.5);
+    this.canvas.width = this.cols * this.charWidth;
+    this.canvas.height = this.rows * this.charHeight;
+    this.ctx.font = `${this.fontSize}px ${this.fontFamily}`;
+    this.ctx.textBaseline = "middle";
+    this.ctx.textAlign = "left";
+    this.clear();
+  }
+  // Clear entire console
+  clear() {
+    this.ctx.fillStyle = this.bgColor;
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+  }
+  // Clear source section (lines 1-22)
+  clearSource() {
+    this.ctx.fillStyle = this.bgColor;
+    const y = 0;
+    const height = 22 * this.charHeight;
+    this.ctx.fillRect(0, y, this.canvas.width, height);
+  }
+  // Clear status line (line 23)
+  clearStatus() {
+    this.ctx.fillStyle = this.statusBg;
+    const y = 22 * this.charHeight;
+    const height = this.charHeight;
+    this.ctx.fillRect(0, y, this.canvas.width, height);
+  }
+  // Clear command line (line 24)
+  clearCommand() {
+    this.ctx.fillStyle = this.bgColor;
+    const y = 23 * this.charHeight;
+    const height = this.charHeight;
+    this.ctx.fillRect(0, y, this.canvas.width, height);
+  }
+  // Draw text starting at console coordinates (col: 0-79, row: 1-24)
+  drawText(text, col, row, color) {
+    if (row < 1 || row > this.rows || col < 0 || col >= this.cols) {
+      return;
+    }
+    const x = col * this.charWidth;
+    const y = (row - 1) * this.charHeight + this.charHeight / 2;
+    this.ctx.fillStyle = color;
+    this.ctx.fillText(text, x, y);
+  }
+  // Draw status line text (always on line 23)
+  drawStatus(text) {
+    this.clearStatus();
+    this.drawText(text, 0, 23, this.fgColor);
+  }
+  // Draw command line with token-based coloring
+  drawCommandLine(text, tokens, cursorPos) {
+    this.clearCommand();
+    let startIdx = 0;
+    for (const token of tokens) {
+      const tokenText = text.slice(startIdx, token.endIndex);
+      const color = token.idea.Color();
+      this.drawText(tokenText, startIdx, 24, color);
+      startIdx = token.endIndex;
+    }
+    if (startIdx < text.length) {
+      this.drawText(text.slice(startIdx), startIdx, 24, "#6c7086");
+    }
+    this.drawCursor(cursorPos, 24);
+  }
+  // Draw cursor at position
+  drawCursor(col, row) {
+    if (row < 1 || row > this.rows || col < 0 || col >= this.cols) {
+      return;
+    }
+    const x = col * this.charWidth;
+    const y = row * this.charHeight - 2;
+    this.ctx.fillStyle = this.fgColor;
+    this.ctx.fillRect(x, y, this.charWidth, 2);
+  }
+  // Get character dimensions (for DrawContext)
+  getCharWidth() {
+    return this.charWidth;
+  }
+  getCharHeight() {
+    return this.charHeight;
+  }
+  // Get canvas dimensions
+  getCols() {
+    return this.cols;
+  }
+  getRows() {
+    return this.rows;
+  }
+  // === Input handling ===
+  setupKeyboardListeners() {
+    document.addEventListener("keydown", (e) => {
+      this.handleKeyDown(e);
+    });
+  }
+  handleKeyDown(e) {
+    const handledKeys = [
+      "Enter",
+      "Backspace",
+      "ArrowLeft",
+      "ArrowRight",
+      "ArrowUp",
+      "ArrowDown",
+      "Home",
+      "End",
+      "Delete",
+      " "
+    ];
+    if (handledKeys.includes(e.key)) {
+      e.preventDefault();
+    }
+    switch (e.key) {
+      case "Enter":
+        this.handleSubmit();
+        break;
+      case "Backspace":
+        this.handleBackspace();
+        break;
+      case "Delete":
+        this.handleDelete();
+        break;
+      case "ArrowLeft":
+        this.handleArrowLeft();
+        break;
+      case "ArrowRight":
+        this.handleArrowRight();
+        break;
+      case "ArrowUp":
+        this.handleArrowUp();
+        break;
+      case "ArrowDown":
+        this.handleArrowDown();
+        break;
+      case "Home":
+        this.handleHome();
+        break;
+      case "End":
+        this.handleEnd();
+        break;
+      default:
+        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          this.handleCharacterInput(e.key);
+        }
+        break;
+    }
+  }
+  handleCharacterInput(char) {
+    this.currentLine = this.currentLine.slice(0, this.cursorPosition) + char + this.currentLine.slice(this.cursorPosition);
+    this.cursorPosition++;
+    this.redrawCommandLine();
+  }
+  handleBackspace() {
+    if (this.cursorPosition > 0) {
+      this.currentLine = this.currentLine.slice(0, this.cursorPosition - 1) + this.currentLine.slice(this.cursorPosition);
+      this.cursorPosition--;
+      this.redrawCommandLine();
+    }
+  }
+  handleDelete() {
+    if (this.cursorPosition < this.currentLine.length) {
+      this.currentLine = this.currentLine.slice(0, this.cursorPosition) + this.currentLine.slice(this.cursorPosition + 1);
+      this.redrawCommandLine();
+    }
+  }
+  handleArrowLeft() {
+    if (this.cursorPosition > 0) {
+      this.cursorPosition--;
+      this.redrawCommandLine();
+    }
+  }
+  handleArrowRight() {
+    if (this.cursorPosition < this.currentLine.length) {
+      this.cursorPosition++;
+      this.redrawCommandLine();
+    }
+  }
+  handleArrowUp() {
+    if (this.history.length === 0) return;
+    if (this.historyIndex === -1) {
+      this.historyIndex = this.history.length - 1;
+    } else if (this.historyIndex > 0) {
+      this.historyIndex--;
+    }
+    this.currentLine = this.history[this.historyIndex];
+    this.cursorPosition = this.currentLine.length;
+    this.redrawCommandLine();
+  }
+  handleArrowDown() {
+    if (this.historyIndex === -1) return;
+    if (this.historyIndex < this.history.length - 1) {
+      this.historyIndex++;
+      this.currentLine = this.history[this.historyIndex];
+    } else {
+      this.historyIndex = -1;
+      this.currentLine = "";
+    }
+    this.cursorPosition = this.currentLine.length;
+    this.redrawCommandLine();
+  }
+  handleHome() {
+    this.cursorPosition = 0;
+    this.redrawCommandLine();
+  }
+  handleEnd() {
+    this.cursorPosition = this.currentLine.length;
+    this.redrawCommandLine();
+  }
+  handleSubmit() {
+    const line = this.currentLine;
+    if (line.trim().length > 0) {
+      this.history.push(line);
+      this.historyIndex = -1;
+    }
+    if (line.trim()) {
+      try {
+        const result = this.parser.start(line);
+        const output = LineView(result);
+        this.drawStatus(output);
+      } catch (error) {
+        this.drawStatus("Error: " + error.message);
+      }
+    }
+    this.currentLine = "";
+    this.cursorPosition = 0;
+    this.redrawCommandLine();
+  }
+  redrawCommandLine() {
+    this.parser.start(this.currentLine);
+    const tokens = this.parser.tokens;
+    console.log("Tokens for:", this.currentLine);
+    tokens.forEach((t, i) => {
+      console.log(
+        `  [${i}] endIndex: ${t.endIndex}, idea: ${t.idea.constructor.name}, text: "${this.currentLine.slice(i === 0 ? 0 : tokens[i - 1].endIndex, t.endIndex)}"`
+      );
+    });
+    const fullText = this.prompt + this.currentLine;
+    const cursorCol = this.prompt.length + this.cursorPosition;
+    const adjustedTokens = tokens.map((t) => ({
+      endIndex: t.endIndex + this.prompt.length,
+      idea: t.idea
+    }));
+    this.drawCommandLine(fullText, adjustedTokens, cursorCol);
+  }
+};
+
+// web/src/playground.ts
+async function initPlayground() {
+  try {
+    await document.fonts.load('14px "JetBrains Mono"');
+    console.log("JetBrains Mono font loaded");
+  } catch (error) {
+    console.error("Failed to load font:", error);
+  }
+  const con = new Console("console-canvas", 14);
+  con.drawStatus("Barry v0.1.0 - Ready");
+}
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initPlayground);
+} else {
+  initPlayground();
+}
 //# sourceMappingURL=playground.js.map

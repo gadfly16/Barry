@@ -6,12 +6,6 @@
 const TOKEN_PATTERN =
   /(?:"(?<quoted>[^"]*)"|(?<number>-?\d+\.?\d*)|(?<seal>[^\w\s"]+)|(?<string>\S+)|(?<append>\s+))/g
 
-// Main parse function - converts string to Idea tree
-export function Parse(input: string): Idea {
-  const parser = new Parser(input)
-  return parser.start()
-}
-
 // Helper function to display an idea - Lists without parentheses
 export function LineView(idea: Idea): string {
   if (idea instanceof List) {
@@ -34,10 +28,11 @@ export function Test() {
     "1+2+3",
   ]
 
+  const parser = new Parser()
   for (const input of testCases) {
     console.log(`\nInput: "${input}"`)
     try {
-      const result = Parse(input)
+      const result = parser.start(input)
       console.log(`  Result: ${LineView(result)}`)
     } catch (e) {
       console.error(`  Error: ${e}`)
@@ -58,10 +53,12 @@ const SealMap = new Map<string, () => Idea>([
 const NameMap = new Map<string, () => Idea>([])
 
 // Parser extracts tokens on-demand and creates ideas from input string
-class Parser {
+export class Parser {
   private regex: RegExp
+  private input: string = ""
+  tokens: { endIndex: number; idea: Idea }[] = []
 
-  constructor(private input: string) {
+  constructor() {
     this.regex = new RegExp(TOKEN_PATTERN.source, TOKEN_PATTERN.flags)
   }
 
@@ -79,12 +76,22 @@ class Parser {
       }
     }
 
-    // No match found - syntax error
-    throw new Error(`Unknown seal: ${sealString[0]}`)
+    // No match found - return error idea
+    const errorIdea = new ErrorIdea(`Unknown seal: ${sealString[0]}`)
+    this.tokens.push({
+      endIndex: matchEndPos,
+      idea: errorIdea,
+    })
+    return errorIdea
   }
 
   // Entry point for parsing - handles root list with special processing
-  start(): Idea {
+  start(input: string): Idea {
+    // Reset state for new input
+    this.input = input
+    this.regex.lastIndex = 0
+    this.tokens = []
+
     // Create root list
     const rootList = new List()
 
@@ -117,8 +124,10 @@ class Parser {
   // Rewinds position if returning null
   next(prev: Idea | null, suitor: number): Idea | null {
     const savedPos = this.regex.lastIndex
+    const savedTokenCount = this.tokens.length
     const rewind = () => {
       this.regex.lastIndex = savedPos
+      this.tokens.length = savedTokenCount
     }
 
     let match = this.regex.exec(this.input)
@@ -149,9 +158,21 @@ class Parser {
     } else if (match.groups.seal !== undefined) {
       // Parse seal - may reset index for remaining characters
       idea = this.parseSeal(match.groups.seal, this.regex.lastIndex)
+      // Check if error was returned
+      if (idea instanceof ErrorIdea) {
+        return null // Stop parsing on error
+      }
     } else {
       rewind()
       return null
+    }
+
+    // Add token info for successfully parsed idea (skip Closure - it's handled by List)
+    if (!(idea instanceof Closure)) {
+      this.tokens.push({
+        endIndex: this.regex.lastIndex,
+        idea: idea,
+      })
     }
 
     console.log("Created idea:", idea instanceof Closure ? ")" : idea.View())
@@ -187,7 +208,11 @@ class Parser {
           break
         }
         if (item instanceof Closure) {
-          // Closure already consumed by next(), exit loop
+          // Add the same List idea again for the closing paren
+          this.tokens.push({
+            endIndex: this.regex.lastIndex,
+            idea: idea,
+          })
           break
         }
         idea.append(item)
@@ -237,6 +262,26 @@ export abstract class Idea {
   }
 
   abstract View(): string
+  abstract Color(): string
+}
+
+// Error idea - represents a parse error
+export class ErrorIdea extends Idea {
+  message: string
+
+  constructor(message: string) {
+    super()
+    this.message = message
+    this.complete = true // Error doesn't need arguments
+  }
+
+  View(): string {
+    return `Error: ${this.message}`
+  }
+
+  Color(): string {
+    return "#fc4b28" // Red for errors
+  }
 }
 
 // Num idea - stores numeric values
@@ -252,6 +297,10 @@ export class Num extends Idea {
   View(): string {
     return this.value.toString()
   }
+
+  Color(): string {
+    return "#a6da95" // Green for numbers
+  }
 }
 
 // Str idea - stores string values
@@ -266,6 +315,10 @@ export class Str extends Idea {
 
   View(): string {
     return '"' + this.value + '"'
+  }
+
+  Color(): string {
+    return "#eed49f" // Yellow for strings
   }
 }
 
@@ -289,6 +342,10 @@ export class List extends Idea {
   LineView(): string {
     return this.items.map((item) => item.View()).join(" ")
   }
+
+  Color(): string {
+    return "#5da4f4" // Blue for lists/parens
+  }
 }
 
 // Nothing idea - empty expression
@@ -301,6 +358,10 @@ export class Nothing extends Idea {
   View(): string {
     return "()"
   }
+
+  Color(): string {
+    return "#7dc4e4" // Brighter blue like lists
+  }
 }
 
 // Closure idea - closing parenthesis marker (never inserted in AST)
@@ -311,6 +372,10 @@ export class Closure extends Idea {
 
   View(): string {
     throw new Error("Closure should never appear in AST")
+  }
+
+  Color(): string {
+    return "#ff00ff" // Brighter blue like lists
   }
 }
 
@@ -348,5 +413,9 @@ export class Add extends Idea {
     const leftArg = this.left === null ? "_" : this.left.View()
     const rightArg = this.right === null ? "_" : this.right.View()
     return leftArg + "+" + rightArg
+  }
+
+  Color(): string {
+    return "#c680f6" // Purple for operators
   }
 }
