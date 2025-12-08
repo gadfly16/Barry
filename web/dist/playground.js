@@ -202,6 +202,9 @@ var Err = class extends Idea {
   Color() {
     return "#fc4b28";
   }
+  Draw(ctx) {
+    ctx.write(this.View(), this.Color());
+  }
 };
 var Num = class extends Idea {
   value;
@@ -215,6 +218,9 @@ var Num = class extends Idea {
   }
   Color() {
     return "#a6da95";
+  }
+  Draw(ctx) {
+    ctx.write(this.View(), this.Color());
   }
 };
 var Str = class extends Idea {
@@ -230,9 +236,14 @@ var Str = class extends Idea {
   Color() {
     return "#eed49f";
   }
+  Draw(ctx) {
+    ctx.write(this.View(), this.Color());
+  }
 };
 var List = class extends Idea {
   items = [];
+  breakpoint = -1;
+  // -1: horizontal, 0: break immediately (vertical), >0: break after nth element
   constructor() {
     super();
     this.complete = true;
@@ -249,6 +260,31 @@ var List = class extends Idea {
   Color() {
     return "#5da4f4";
   }
+  Draw(ctx) {
+    const showParens = !ctx.lineStart;
+    if (showParens) {
+      ctx.write("(", this.Color());
+    } else if (this.breakpoint === -1) {
+      ctx.lineStart = false;
+    }
+    if (this.breakpoint === 0) {
+      for (let i = 0; i < this.items.length; i++) {
+        if (!ctx.inSourceBounds()) break;
+        this.items[i].Draw(ctx);
+        ctx.newLine();
+      }
+    } else {
+      for (let i = 0; i < this.items.length; i++) {
+        this.items[i].Draw(ctx);
+        if (i < this.items.length - 1) {
+          ctx.write(" ", this.Color());
+        }
+      }
+    }
+    if (showParens) {
+      ctx.write(")", this.Color());
+    }
+  }
 };
 var Nothing = class extends Idea {
   constructor() {
@@ -261,6 +297,9 @@ var Nothing = class extends Idea {
   Color() {
     return "#7dc4e4";
   }
+  Draw(ctx) {
+    ctx.write(this.View(), this.Color());
+  }
 };
 var Closure = class extends Idea {
   constructor() {
@@ -271,6 +310,9 @@ var Closure = class extends Idea {
   }
   Color() {
     return "#ff00ff";
+  }
+  Draw(ctx) {
+    throw new Error("Closure should never appear in AST");
   }
 };
 var Add = class extends Idea {
@@ -305,9 +347,51 @@ var Add = class extends Idea {
   Color() {
     return "#c680f6";
   }
+  Draw(ctx) {
+    if (this.left !== null) {
+      this.left.Draw(ctx);
+    } else {
+      ctx.write("_", this.Color());
+    }
+    ctx.write("+", this.Color());
+    if (this.right !== null) {
+      this.right.Draw(ctx);
+    } else {
+      ctx.write("_", this.Color());
+    }
+  }
 };
 
 // web/src/console.ts
+var DrawContext2 = class {
+  console;
+  col = 1;
+  row = 1;
+  lineStart = true;
+  constructor(console2) {
+    this.console = console2;
+  }
+  // Write text at current position and advance cursor
+  write(text, color) {
+    this.console.drawText(text, this.col, this.row, color);
+    this.col += text.length;
+    this.lineStart = false;
+  }
+  // Move to next line
+  newLine() {
+    this.row++;
+    this.col = 1;
+    this.lineStart = true;
+  }
+  // Get remaining columns in current row
+  remainingCols() {
+    return this.console.getCols() - this.col + 1;
+  }
+  // Check if position is within source bounds (rows 1-22)
+  inSourceBounds() {
+    return this.row >= 1 && this.row <= 22;
+  }
+};
 var Console = class {
   cols = 80;
   rows = 24;
@@ -328,6 +412,8 @@ var Console = class {
   // Status line background
   // Parser
   parser = new Parser();
+  // Source - vertical implicit list of lines
+  source;
   // Command line input state
   prompt = "(_*_) ";
   currentLine = "";
@@ -346,6 +432,8 @@ var Console = class {
       throw new Error("Failed to get 2D context");
     }
     this.ctx = ctx;
+    this.source = new List();
+    this.source.breakpoint = 0;
     this.initialize();
     this.setupKeyboardListeners();
     this.redrawCommandLine();
@@ -402,6 +490,12 @@ var Console = class {
   drawStatus(text) {
     this.clearStatus();
     this.drawText(text, 0, 23, this.fgColor);
+  }
+  // Draw source section from source tree
+  drawSource() {
+    this.clearSource();
+    const ctx = new DrawContext2(this);
+    this.source.Draw(ctx);
   }
   // Draw command line with token-based coloring
   drawCommandLine(text, tokens, cursorPos) {
@@ -569,6 +663,8 @@ var Console = class {
     if (line.trim()) {
       try {
         const result = this.parser.start(line);
+        this.source.append(result);
+        this.drawSource();
         const output = LineView(result);
         this.drawStatus(output);
       } catch (error) {

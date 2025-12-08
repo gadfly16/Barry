@@ -1,6 +1,8 @@
 // barry.ts
 // A simple parser for parsing expressions into an AST of ideas
 
+import { DrawContext } from "./console.js"
+
 // Combined regex pattern for token matching with global flag
 // Order matters: quoted strings, wraps (parens), numbers, seals, unquoted strings, whitespace
 const TOKEN_PATTERN =
@@ -261,6 +263,7 @@ export abstract class Idea {
 
   abstract View(): string
   abstract Color(): string
+  abstract Draw(ctx: DrawContext): void
 }
 
 // Err idea - represents a parse error
@@ -279,6 +282,10 @@ export class Err extends Idea {
 
   Color(): string {
     return "#fc4b28" // Red for errors
+  }
+
+  Draw(ctx: DrawContext): void {
+    ctx.write(this.View(), this.Color())
   }
 }
 
@@ -299,6 +306,10 @@ export class Num extends Idea {
   Color(): string {
     return "#a6da95" // Green for numbers
   }
+
+  Draw(ctx: DrawContext): void {
+    ctx.write(this.View(), this.Color())
+  }
 }
 
 // Str idea - stores string values
@@ -318,11 +329,16 @@ export class Str extends Idea {
   Color(): string {
     return "#eed49f" // Yellow for strings
   }
+
+  Draw(ctx: DrawContext): void {
+    ctx.write(this.View(), this.Color())
+  }
 }
 
 // List idea - contains sequence of ideas
 export class List extends Idea {
   items: Idea[] = []
+  breakpoint: number = -1 // -1: horizontal, 0: break immediately (vertical), >0: break after nth element
 
   constructor() {
     super()
@@ -344,6 +360,39 @@ export class List extends Idea {
   Color(): string {
     return "#5da4f4" // Blue for lists/parens
   }
+
+  Draw(ctx: DrawContext): void {
+    // Omit parens if at line start (implicit list)
+    const showParens = !ctx.lineStart
+
+    if (showParens) {
+      ctx.write("(", this.Color())
+    } else if (this.breakpoint === -1) {
+      // Only horizontal lists set lineStart to false when omitting parens
+      ctx.lineStart = false
+    }
+
+    if (this.breakpoint === 0) {
+      // Vertical layout: break immediately, each item on its own line
+      for (let i = 0; i < this.items.length; i++) {
+        if (!ctx.inSourceBounds()) break // Stop if out of bounds
+        this.items[i].Draw(ctx)
+        ctx.newLine()
+      }
+    } else {
+      // Horizontal layout: all on one line with spaces
+      for (let i = 0; i < this.items.length; i++) {
+        this.items[i].Draw(ctx)
+        if (i < this.items.length - 1) {
+          ctx.write(" ", this.Color())
+        }
+      }
+    }
+
+    if (showParens) {
+      ctx.write(")", this.Color())
+    }
+  }
 }
 
 // Nothing idea - empty expression
@@ -360,6 +409,10 @@ export class Nothing extends Idea {
   Color(): string {
     return "#7dc4e4" // Brighter blue like lists
   }
+
+  Draw(ctx: DrawContext): void {
+    ctx.write(this.View(), this.Color())
+  }
 }
 
 // Closure idea - closing parenthesis marker (never inserted in AST)
@@ -373,7 +426,11 @@ export class Closure extends Idea {
   }
 
   Color(): string {
-    return "#ff00ff" // Brighter blue like lists
+    return "#ff00ff" // Magenta (should never be visible)
+  }
+
+  Draw(ctx: DrawContext): void {
+    throw new Error("Closure should never appear in AST")
   }
 }
 
@@ -415,5 +472,19 @@ export class Add extends Idea {
 
   Color(): string {
     return "#c680f6" // Purple for operators
+  }
+
+  Draw(ctx: DrawContext): void {
+    if (this.left !== null) {
+      this.left.Draw(ctx)
+    } else {
+      ctx.write("_", this.Color())
+    }
+    ctx.write("+", this.Color())
+    if (this.right !== null) {
+      this.right.Draw(ctx)
+    } else {
+      ctx.write("_", this.Color())
+    }
   }
 }

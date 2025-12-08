@@ -3,11 +3,47 @@
 // Line 23: Status line
 // Line 24: Command line
 
-import { Parser, LineView, Idea } from "./barry.js"
+import { Parser, LineView, Idea, List } from "./barry.js"
 
 export interface TokenInfo {
   endIndex: number // End position in text
   idea: Idea // The idea parsed from this text segment
+}
+
+// DrawContext - provides drawing operations for ideas
+export class DrawContext {
+  private console: Console
+  col: number = 1
+  row: number = 1
+  lineStart: boolean = true
+
+  constructor(console: Console) {
+    this.console = console
+  }
+
+  // Write text at current position and advance cursor
+  write(text: string, color: string): void {
+    this.console.drawText(text, this.col, this.row, color)
+    this.col += text.length
+    this.lineStart = false
+  }
+
+  // Move to next line
+  newLine(): void {
+    this.row++
+    this.col = 1
+    this.lineStart = true
+  }
+
+  // Get remaining columns in current row
+  remainingCols(): number {
+    return this.console.getCols() - this.col + 1
+  }
+
+  // Check if position is within source bounds (rows 1-22)
+  inSourceBounds(): boolean {
+    return this.row >= 1 && this.row <= 22
+  }
 }
 
 export class Console {
@@ -32,6 +68,9 @@ export class Console {
   // Parser
   private parser = new Parser()
 
+  // Source - vertical implicit list of lines
+  private source: List
+
   // Command line input state
   private prompt = "(_*_) "
   private currentLine: string = ""
@@ -55,6 +94,10 @@ export class Console {
       throw new Error("Failed to get 2D context")
     }
     this.ctx = ctx
+
+    // Initialize source as vertical implicit list
+    this.source = new List()
+    this.source.breakpoint = 0 // Break immediately - vertical layout
 
     this.initialize()
     this.setupKeyboardListeners()
@@ -129,6 +172,13 @@ export class Console {
   drawStatus(text: string): void {
     this.clearStatus()
     this.drawText(text, 0, 23, this.fgColor)
+  }
+
+  // Draw source section from source tree
+  drawSource(): void {
+    this.clearSource()
+    const ctx = new DrawContext(this)
+    this.source.Draw(ctx)
   }
 
   // Draw command line with token-based coloring
@@ -337,10 +387,13 @@ export class Console {
       this.historyIndex = -1
     }
 
-    // Parse and display result
+    // Parse and add to source
     if (line.trim()) {
       try {
         const result = this.parser.start(line)
+        this.source.append(result)
+        this.drawSource()
+        // Also show in status line
         const output = LineView(result)
         this.drawStatus(output)
       } catch (error) {
