@@ -233,18 +233,6 @@ p: x y   >> this evaluates to 1 2, despite y is further down in the input
 y: 2
 ```
 
-A label in it's own line points at the element that follows it vertically in the
-input.
-
-```
-a: 1
-
-b:
-2
-```
-
-A refers to 1, b refers to 2.
-
 ## Stranger Strings
 
 As we saw Barry in it's ethernal wisdom distinguishes quoted and unquoted
@@ -351,14 +339,6 @@ l: (1 2 3)   >> l refers to the list
 l': 4 5 6    >> l' refers to 4, not the list
 ```
 
-Since labels on their own are reffering to the next idea in the vertical
-implicit list you can also use it to name lists.
-
-```
-l:
-4 5 6
-```
-
 ## Breakdancing on Ice
 
 We can use increased indentation to break long horizontal lines into vertical
@@ -373,24 +353,19 @@ continue the previous _line_, but from now on in a _vertical_ implicit list.
 
 The above example produces 1 2 3 (4 5) . The line with increased indentation
 must follow the line it wants to continue immediately. An indented line with
-_nothing to continue_ in the previous line _breaks itself_ turning into a
-vertical implicit list immediately.
+_nothing to continue_ in the previous line is an error.
 
 ```
 something: 12
 
-  1
+  1   >> error, nothing to continue
   2
   3
 ```
 
-This will be parsed as something: 12 (1 2 3). When the parser reaches 1, it
-detects the increased indentation, but there's nothing to continue in the
-previous line, so the line is parsed as the first element of a vertical implicit
-list.
-
-If we combine this rule with the rule of labels in their own lines, adding that
-such labels are _not_ consider continuable, we get the following behavior.
+When the parser reaches 1, it detects the increased indentation, but there's
+nothing to continue in the previous line. But we can continue a line vertically
+that's already started with a Label.
 
 ```
 fish:
@@ -399,8 +374,27 @@ fish:
   1
 ```
 
-Since the label is not continuable it won't point to "Kilgore Trout" but to the
-next idea which is the whole vertically laid out list.
+If we break immediately after a label, the label will point to the list produced
+by the vertical layout and _not_ the first element. This two is unfortunately
+different.
+
+```
+a: 1 2 3
+b:
+  1 2 3
+```
+
+In the above example a refers to the first element of the list 1 and b refers to
+the entire list. If we want to write the second example as a one-liner we need
+to enclose explicitly: b: (1 2 3) .
+
+A label that the parser that doesn't refer to anything is also produces an
+error.
+
+```
+a:   >> error, as label is followed by an empty line, so nothing to name
+
+```
 
 ## Only Love is Unconditional
 

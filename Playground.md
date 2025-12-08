@@ -34,12 +34,41 @@ The playground uses a canvas-based console divided into three sections:
 character buffer for the source section. Instead, ideas render themselves
 directly to the canvas.
 
+### Source of Truth Model
+
+Every valid Barry code produces an idea tree (IT), and every idea tree can
+produce code. This creates a bidirectional relationship where the tree is
+canonical:
+
+1. **Valid Ideas** - The canonical form. When code successfully parses without
+   errors, we discard all formatting information (meaningless whitespace,
+   unnecessary parentheses, etc.). The idea tree becomes the sole source of
+   truth.
+
+2. **Edit Ideas** - Temporary wrappers for lines under construction. An Edit
+   idea holds:
+   - Raw string version of the line (with whitespace, parens, incomplete
+     operators)
+   - TokenInfo list that maps the tree to the raw string
+   - Potentially contains Err nodes for syntax errors
+
+3. **Promotion from Edit to Valid** - When an Edit's parsed tree becomes valid
+   (complete, no errors), the Edit "solidifies": the raw string and token
+   mapping are discarded, leaving only the pure idea tree.
+
+**Key insight**: Edit and Err are just idea types - they fit naturally in
+the tree structure. The tree can contain both "solid" ideas and "liquid" Edits.
+Only Edits need the raw string ↔ tree mapping; valid ideas serialize
+deterministically.
+
 ### Memory Model
 
 - **Live trees are aggressively hydrated** - optimized for speed, not memory
 - **Dehydrated storage uses standard notation** - compact serialization via
   `Str()`
 - Trees are loaded/parsed on demand, kept in memory while active
+- **Edits are ephemeral** - only exist during construction, then solidify or
+  persist with errors
 
 ---
 
@@ -95,50 +124,89 @@ traversal is acceptable.
 
 ---
 
-## Editing State: The Line Buffer
+## Editing State: Edit Ideas
 
-### Problem
+### The Edit Idea Concept
 
-We need to handle text that is:
+An **Edit** is a special idea type that wraps code under construction. It
+bridges the gap between raw text input and validated idea trees.
 
-- Currently being edited (potentially malformed)
-- Contains parse errors
-- Not yet a valid idea tree
-
-### Solution: Line Buffer Structure
+**Edit Structure** (conceptual):
 
 ```typescript
-interface LineBuffer {
-  text: string; // Raw source text
-  tokens: TokenInfo[]; // Parser's view of the text
+class Edit extends Idea {
+  rawText: string; // Source text with all formatting
+  tokens: TokenInfo[]; // Maps text positions to parsed ideas
+  tree: Idea | null; // Parsed result (may contain ErrorIdea nodes)
 }
+```
 
+**TokenInfo Structure** (current implementation):
+
+```typescript
 interface TokenInfo {
   endIndex: number; // End position in text
-  kind: TokenKind; // What the parser thinks this is
-  color: string; // Display color
-  error?: string; // Error message if problematic
+  idea: Idea; // The parsed idea at this position
 }
 ```
 
-**Usage**:
+### Edit Scope and Lifecycle
 
-- Command line input accumulates in a LineBuffer
-- Parser populates `tokens[]` as it processes
-- Renderer uses token info to colorize and show errors
-- On successful parse, LineBuffer converts to idea tree
-- On error, LineBuffer persists with error annotations
+**Scope**: An Edit wraps a single line of code (possibly including vertical
+breaks via indentation). Barry is designed for line-by-line parsing - even when
+loading files, the parser processes line by line.
 
-**Rendering**:
+**Lifecycle stages**:
+
+1. **Creation** - User starts typing, Edit is created with raw text
+
+2. **Continuous Parsing** - Every keystroke re-parses:
+   - Updates `tokens` array (maps text positions to ideas)
+   - Updates local `tree` (may contain Err nodes)
+
+3. **Semantic Propagation** - After each parse, changes ripple through entire
+   tree:
+   - Label definitions may resolve previously-unresolved Str ideas into
+     references
+   - Type constraints propagate (e.g., Add requires Num operands)
+   - Errors can appear/disappear anywhere based on these semantic changes
+   - **This happens at every keystroke for live feedback**
+   - Requires hydrated tree for performance (full semantic analysis per
+     keystroke)
+
+4. **Solidification** - When cursor leaves edit area:
+   - Edit wrapper is removed
+   - Raw text and tokens discarded
+   - Pure idea tree remains (even if still incomplete/errored)
+
+**Example of semantic propagation**:
+```
+Line 1: x + 5      # Initially: Str("x") + Num(5) - type error
+Line 2: x: 12      # Label resolves Line 1's x into Ref(x)
+                   # Type check now passes: Ref(x) + Num(5) valid
+```
+
+**Multiple Edits**: Any number of Edits can coexist in the tree simultaneously.
+Users may edit multiple lines at once (though uncommon).
+
+**Location**: Edits live directly in their position in the tree structure - they
+are regular ideas, not special containers.
+
+### Edit Rendering
+
+Edits render using their TokenInfo list for syntax highlighting:
 
 ```
-text:   "12 + abc"
+rawText: "12 + abc"
 tokens: [
-  { endIndex: 2, kind: Num, color: "#a6da95" },
-  { endIndex: 5, kind: Operator, color: "#c6a0f6" },
-  { endIndex: 9, kind: Str, color: "#eed49f", error: "Unresolved reference" }
+  { endIndex: 2, idea: Num(12) },        // Green
+  { endIndex: 5, idea: Add(_,_) },       // Purple
+  { endIndex: 9, idea: Str("abc") }      // Yellow
 ]
 ```
+
+Each idea provides its own color via `Color()` method. Unparsed text (after
+last token) renders in gray.
 
 ---
 

@@ -1,5 +1,5 @@
 // web/src/barry.ts
-var TOKEN_PATTERN = /(?:"(?<quoted>[^"]*)"|(?<number>-?\d+\.?\d*)|(?<seal>[^\w\s"]+)|(?<string>\S+)|(?<append>\s+))/g;
+var TOKEN_PATTERN = /(?:"(?<quoted>[^"]*)"|(?<open>\()|(?<close>\))|(?<number>-?\d+\.?\d*)|(?<seal>[^\w\s"()]+)|(?<string>\S+)|(?<append>\s+))/g;
 function LineView(idea) {
   if (idea instanceof List) {
     return idea.LineView();
@@ -30,11 +30,7 @@ Input: "${input}"`);
   }
   console.log("\n=== Tests Complete ===");
 }
-var SealMap = /* @__PURE__ */ new Map([
-  ["(", () => new List()],
-  [")", () => new Closure()],
-  ["+", () => new Add()]
-]);
+var SealMap = /* @__PURE__ */ new Map([["+", () => new Add()]]);
 var NameMap = /* @__PURE__ */ new Map([]);
 var Parser = class {
   regex;
@@ -54,7 +50,7 @@ var Parser = class {
         return SealMap.get(candidate)();
       }
     }
-    const errorIdea = new ErrorIdea(`Unknown seal: ${sealString[0]}`);
+    const errorIdea = new Err(`Unknown seal: ${sealString[0]}`);
     this.tokens.push({
       endIndex: matchEndPos,
       idea: errorIdea
@@ -107,6 +103,10 @@ var Parser = class {
       idea = new Num(match.groups.number);
     } else if (match.groups.quoted !== void 0) {
       idea = new Str(match.groups.quoted);
+    } else if (match.groups.open !== void 0) {
+      idea = new List();
+    } else if (match.groups.close !== void 0) {
+      idea = new Closure();
     } else if (match.groups.string !== void 0) {
       if (NameMap.has(match.groups.string)) {
         idea = NameMap.get(match.groups.string)();
@@ -115,9 +115,6 @@ var Parser = class {
       }
     } else if (match.groups.seal !== void 0) {
       idea = this.parseSeal(match.groups.seal, this.regex.lastIndex);
-      if (idea instanceof ErrorIdea) {
-        return null;
-      }
     } else {
       rewind();
       return null;
@@ -192,7 +189,7 @@ var Idea = class {
     return null;
   }
 };
-var ErrorIdea = class extends Idea {
+var Err = class extends Idea {
   message;
   constructor(message) {
     super();

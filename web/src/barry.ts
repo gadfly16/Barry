@@ -2,9 +2,9 @@
 // A simple parser for parsing expressions into an AST of ideas
 
 // Combined regex pattern for token matching with global flag
-// Order matters: quoted strings, then numbers, then seals, then unquoted strings, then whitespace
+// Order matters: quoted strings, wraps (parens), numbers, seals, unquoted strings, whitespace
 const TOKEN_PATTERN =
-  /(?:"(?<quoted>[^"]*)"|(?<number>-?\d+\.?\d*)|(?<seal>[^\w\s"]+)|(?<string>\S+)|(?<append>\s+))/g
+  /(?:"(?<quoted>[^"]*)"|(?<open>\()|(?<close>\))|(?<number>-?\d+\.?\d*)|(?<seal>[^\w\s"()]+)|(?<string>\S+)|(?<append>\s+))/g
 
 // Helper function to display an idea - Lists without parentheses
 export function LineView(idea: Idea): string {
@@ -43,11 +43,7 @@ export function Test() {
 }
 
 // Seal map - maps seal strings to their idea constructors
-const SealMap = new Map<string, () => Idea>([
-  ["(", () => new List()],
-  [")", () => new Closure()],
-  ["+", () => new Add()],
-])
+const SealMap = new Map<string, () => Idea>([["+", () => new Add()]])
 
 // Name map - maps unquoted strings to their idea constructors
 const NameMap = new Map<string, () => Idea>([])
@@ -77,7 +73,7 @@ export class Parser {
     }
 
     // No match found - return error idea
-    const errorIdea = new ErrorIdea(`Unknown seal: ${sealString[0]}`)
+    const errorIdea = new Err(`Unknown seal: ${sealString[0]}`)
     this.tokens.push({
       endIndex: matchEndPos,
       idea: errorIdea,
@@ -148,6 +144,12 @@ export class Parser {
     } else if (match.groups.quoted !== undefined) {
       // Create Str idea from quoted string (quotes already removed by regex)
       idea = new Str(match.groups.quoted)
+    } else if (match.groups.open !== undefined) {
+      // Opening parenthesis - create List
+      idea = new List()
+    } else if (match.groups.close !== undefined) {
+      // Closing parenthesis - create Closure
+      idea = new Closure()
     } else if (match.groups.string !== undefined) {
       // Look up in NameMap, create Str if not found
       if (NameMap.has(match.groups.string)) {
@@ -158,10 +160,6 @@ export class Parser {
     } else if (match.groups.seal !== undefined) {
       // Parse seal - may reset index for remaining characters
       idea = this.parseSeal(match.groups.seal, this.regex.lastIndex)
-      // Check if error was returned
-      if (idea instanceof ErrorIdea) {
-        return null // Stop parsing on error
-      }
     } else {
       rewind()
       return null
@@ -265,8 +263,8 @@ export abstract class Idea {
   abstract Color(): string
 }
 
-// Error idea - represents a parse error
-export class ErrorIdea extends Idea {
+// Err idea - represents a parse error
+export class Err extends Idea {
   message: string
 
   constructor(message: string) {
