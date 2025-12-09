@@ -3,6 +3,15 @@
 
 import { DrawContext } from "./console.js"
 
+// Enum for value kinds that ideas can return
+export enum Kind {
+  Num = "Num",
+  Str = "Str",
+  List = "List",
+  Nothing = "Bit",
+  Err = "Err",
+}
+
 // Combined regex pattern for token matching with global flag
 // Order matters: quoted strings, wraps (parens), numbers, seals, unquoted strings, whitespace
 const TOKEN_PATTERN =
@@ -199,6 +208,21 @@ export class Parser {
       return idea
     }
 
+    // Fill recursion: if idea has right argument slots, try to fill them
+    if ("consumePost" in idea) {
+      const postPos = this.regex.lastIndex
+      const rewindPost = () => {
+        this.regex.lastIndex = postPos
+      }
+      const nextIdea = this.next(null, idea.precedence)
+      if (nextIdea !== null) {
+        if (!(idea as any).consumePost(nextIdea)) {
+          // Didn't consume, rewind so next idea can be used elsewhere
+          rewindPost()
+        }
+      }
+    }
+
     // Handle List - run append loop until Closure or EOF
     if (idea instanceof List) {
       while (true) {
@@ -218,24 +242,11 @@ export class Parser {
         idea.append(item)
       }
 
-      // Post-process: empty list becomes Nothing
+      // Post-process: apply single element rule
       if (idea.items.length === 0) {
         idea = new Nothing()
-      }
-    }
-
-    // Fill recursion: if idea has right argument slots, try to fill them
-    if ("consumePost" in idea) {
-      const postPos = this.regex.lastIndex
-      const rewindPost = () => {
-        this.regex.lastIndex = postPos
-      }
-      const nextIdea = this.next(null, idea.precedence)
-      if (nextIdea !== null) {
-        if (!(idea as any).consumePost(nextIdea)) {
-          // Didn't consume, rewind so next idea can be used elsewhere
-          rewindPost()
-        }
+      } else if (idea.items.length === 1) {
+        idea = idea.items[0]
       }
     }
 
@@ -255,6 +266,7 @@ export abstract class Idea {
   precedence: number = 0
   finished: boolean = false
   complete: boolean = false // Ideas are incomplete by default
+  abstract valueKind: Kind
 
   // Default: ideas don't consume pre (return null)
   consumePre(prev: Idea): Idea | null {
@@ -268,6 +280,7 @@ export abstract class Idea {
 
 // Err idea - represents a parse error
 export class Err extends Idea {
+  valueKind = Kind.Err
   message: string
 
   constructor(message: string) {
@@ -291,6 +304,7 @@ export class Err extends Idea {
 
 // Num idea - stores numeric values
 export class Num extends Idea {
+  valueKind = Kind.Num
   value: number
 
   constructor(match: string) {
@@ -314,6 +328,7 @@ export class Num extends Idea {
 
 // Str idea - stores string values
 export class Str extends Idea {
+  valueKind = Kind.Str
   value: string
 
   constructor(match: string) {
@@ -337,6 +352,7 @@ export class Str extends Idea {
 
 // List idea - contains sequence of ideas
 export class List extends Idea {
+  valueKind = Kind.List
   items: Idea[] = []
   breakpoint: number = -1 // -1: horizontal, 0: break immediately (vertical), >0: break after nth element
 
@@ -397,6 +413,8 @@ export class List extends Idea {
 
 // Nothing idea - empty expression
 export class Nothing extends Idea {
+  valueKind = Kind.Nothing
+
   constructor() {
     super()
     this.complete = true
@@ -417,6 +435,8 @@ export class Nothing extends Idea {
 
 // Closure idea - closing parenthesis marker (never inserted in AST)
 export class Closure extends Idea {
+  valueKind = Kind.Nothing
+
   constructor() {
     super()
   }
@@ -436,6 +456,7 @@ export class Closure extends Idea {
 
 // Add idea - addition operator
 export class Add extends Idea {
+  valueKind = Kind.Num
   left: Idea | null = null
   right: Idea | null = null
 
@@ -445,7 +466,7 @@ export class Add extends Idea {
   }
 
   consumePre(prev: Idea): Idea | null {
-    if (prev instanceof Num) {
+    if (prev.valueKind === Kind.Num) {
       this.left = prev
       return this
     }
@@ -453,7 +474,7 @@ export class Add extends Idea {
   }
 
   consumePost(next: Idea): boolean {
-    if (next instanceof Num) {
+    if (next.valueKind === Kind.Num) {
       this.right = next
       // Only complete when both left and right are filled
       if (this.left !== null) {

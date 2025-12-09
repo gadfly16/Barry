@@ -1,4 +1,12 @@
 // web/src/barry.ts
+var Kind = /* @__PURE__ */ ((Kind2) => {
+  Kind2["Num"] = "Num";
+  Kind2["Str"] = "Str";
+  Kind2["List"] = "List";
+  Kind2["Nothing"] = "Bit";
+  Kind2["Err"] = "Err";
+  return Kind2;
+})(Kind || {});
 var TOKEN_PATTERN = /(?:"(?<quoted>[^"]*)"|(?<open>\()|(?<close>\))|(?<number>-?\d+\.?\d*)|(?<seal>[^\w\s"()]+)|(?<string>\S+)|(?<append>\s+))/g;
 function LineView(idea) {
   if (idea instanceof List) {
@@ -141,6 +149,18 @@ var Parser = class {
     if (idea instanceof Closure) {
       return idea;
     }
+    if ("consumePost" in idea) {
+      const postPos = this.regex.lastIndex;
+      const rewindPost = () => {
+        this.regex.lastIndex = postPos;
+      };
+      const nextIdea2 = this.next(null, idea.precedence);
+      if (nextIdea2 !== null) {
+        if (!idea.consumePost(nextIdea2)) {
+          rewindPost();
+        }
+      }
+    }
     if (idea instanceof List) {
       while (true) {
         const item = this.next(null, 0);
@@ -158,18 +178,8 @@ var Parser = class {
       }
       if (idea.items.length === 0) {
         idea = new Nothing();
-      }
-    }
-    if ("consumePost" in idea) {
-      const postPos = this.regex.lastIndex;
-      const rewindPost = () => {
-        this.regex.lastIndex = postPos;
-      };
-      const nextIdea2 = this.next(null, idea.precedence);
-      if (nextIdea2 !== null) {
-        if (!idea.consumePost(nextIdea2)) {
-          rewindPost();
-        }
+      } else if (idea.items.length === 1) {
+        idea = idea.items[0];
       }
     }
     const nextIdea = this.next(idea, suitor);
@@ -183,13 +193,13 @@ var Idea = class {
   precedence = 0;
   finished = false;
   complete = false;
-  // Ideas are incomplete by default
   // Default: ideas don't consume pre (return null)
   consumePre(prev) {
     return null;
   }
 };
 var Err = class extends Idea {
+  valueKind = "Err" /* Err */;
   message;
   constructor(message) {
     super();
@@ -207,6 +217,7 @@ var Err = class extends Idea {
   }
 };
 var Num = class extends Idea {
+  valueKind = "Num" /* Num */;
   value;
   constructor(match) {
     super();
@@ -224,6 +235,7 @@ var Num = class extends Idea {
   }
 };
 var Str = class extends Idea {
+  valueKind = "Str" /* Str */;
   value;
   constructor(match) {
     super();
@@ -241,6 +253,7 @@ var Str = class extends Idea {
   }
 };
 var List = class extends Idea {
+  valueKind = "List" /* List */;
   items = [];
   breakpoint = -1;
   // -1: horizontal, 0: break immediately (vertical), >0: break after nth element
@@ -287,6 +300,7 @@ var List = class extends Idea {
   }
 };
 var Nothing = class extends Idea {
+  valueKind = "Bit" /* Nothing */;
   constructor() {
     super();
     this.complete = true;
@@ -302,6 +316,7 @@ var Nothing = class extends Idea {
   }
 };
 var Closure = class extends Idea {
+  valueKind = "Bit" /* Nothing */;
   constructor() {
     super();
   }
@@ -316,6 +331,7 @@ var Closure = class extends Idea {
   }
 };
 var Add = class extends Idea {
+  valueKind = "Num" /* Num */;
   left = null;
   right = null;
   constructor() {
@@ -323,14 +339,14 @@ var Add = class extends Idea {
     this.precedence = 10;
   }
   consumePre(prev) {
-    if (prev instanceof Num) {
+    if (prev.valueKind === "Num" /* Num */) {
       this.left = prev;
       return this;
     }
     return null;
   }
   consumePost(next) {
-    if (next instanceof Num) {
+    if (next.valueKind === "Num" /* Num */) {
       this.right = next;
       if (this.left !== null) {
         this.complete = true;
