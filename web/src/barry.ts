@@ -7,24 +7,28 @@ import { DrawContext } from "./console.js"
 export enum Kind {
   Num = "Num",
   Str = "Str",
+  Unquoted = "Unquoted",
+  Label = "Label",
   List = "List",
   Nothing = "Bit",
-  Err = "Err",
+  Unknown = "Unknown",
 }
 
 // Enum for syntax colors
 export enum Color {
-  Number = "#a6da95",   // Green
-  String = "#eed49f",   // Yellow
-  List = "#5da4f4",     // Blue (lists/parens)
-  Operator = "#c680f6", // Purple
-  Error = "#fc4b28",    // Red
+  Number = "#a6da95",
+  String = "#ffb0b0",
+  Unquoted = "#eed49f",
+  Label = "#CC55EE",
+  List = "#5da4f4",
+  Operator = "#c680f6",
+  Error = "#FF4422",
 }
 
 // Combined regex pattern for token matching with global flag
 // Order matters: quoted strings, wraps (parens), numbers, seals, unquoted strings, whitespace
 const TOKEN_PATTERN =
-  /(?:"(?<quoted>[^"]*)"|(?<open>\()|(?<close>\))|(?<number>-?\d+\.?\d*)|(?<seal>[^\w\s"()]+)|(?<string>\S+)|(?<append>\s+))/g
+  /(?:"(?<quoted>[^"]*)"|(?<list>\()|(?<closure>\))|(?<number>-?\d+\.?\d*)|(?<seal>[^\w\s"()]+)|(?<unquoted>[^:\s]+)|(?<append>\s+))/g
 
 // Helper function to display an idea - Lists without parentheses
 export function LineView(idea: Idea): string {
@@ -66,6 +70,7 @@ export function Test() {
 const SealMap = new Map<string, () => Idea>([
   ["+", () => new Add()],
   ["*", () => new Mul()],
+  [":", () => new Label()],
 ])
 
 // Name map - maps unquoted strings to their idea constructors
@@ -95,13 +100,16 @@ export class Parser {
       }
     }
 
-    // No match found - return error idea
-    const errorIdea = new Err(`Unknown seal: ${sealString[0]}`)
+    // No match found - return unknown idea
+    const unknownIdea = new Unknown(
+      sealString[0],
+      `Unknown seal: ${sealString[0]}`,
+    )
     this.tokens.push({
       endIndex: matchEndPos,
-      idea: errorIdea,
+      idea: unknownIdea,
     })
-    return errorIdea
+    return unknownIdea
   }
 
   // Entry point for parsing - handles root list with special processing
@@ -167,18 +175,18 @@ export class Parser {
     } else if (match.groups.quoted !== undefined) {
       // Create Str idea from quoted string (quotes already removed by regex)
       idea = new Str(match.groups.quoted)
-    } else if (match.groups.open !== undefined) {
+    } else if (match.groups.list !== undefined) {
       // Opening parenthesis - create List
       idea = new List()
-    } else if (match.groups.close !== undefined) {
+    } else if (match.groups.closure !== undefined) {
       // Closing parenthesis - create Closure
       idea = new Closure()
-    } else if (match.groups.string !== undefined) {
-      // Look up in NameMap, create Str if not found
-      if (NameMap.has(match.groups.string)) {
-        idea = NameMap.get(match.groups.string)!()
+    } else if (match.groups.unquoted !== undefined) {
+      // Look up in NameMap, create Unquoted if not found
+      if (NameMap.has(match.groups.unquoted)) {
+        idea = NameMap.get(match.groups.unquoted)!()
       } else {
-        idea = new Str(match.groups.string)
+        idea = new Unquoted(match.groups.unquoted)
       }
     } else if (match.groups.seal !== undefined) {
       // Parse seal - may reset index for remaining characters
@@ -213,6 +221,9 @@ export class Parser {
       }
       // prev consumed, use the returned idea
       idea = consumed
+
+      // Remove consumed prev token (second-to-last, current idea is last)
+      this.tokens.splice(this.tokens.length - 2, 1)
     }
 
     // Handle Closure - return immediately after look-ahead check
@@ -278,6 +289,7 @@ export abstract class Idea {
   precedence: number = 0
   finished: boolean = false
   complete: boolean = false // Ideas are incomplete by default
+  error: string | null = null // Error message if idea has a problem
   abstract valueKind: Kind
 
   // Default: ideas don't consume pre (return null)
@@ -290,19 +302,20 @@ export abstract class Idea {
   abstract Draw(ctx: DrawContext): void
 }
 
-// Err idea - represents a parse error
-export class Err extends Idea {
-  valueKind = Kind.Err
-  message: string
+// Unknown idea - represents unrecognized input
+export class Unknown extends Idea {
+  valueKind = Kind.Unknown
+  value: string
 
-  constructor(message: string) {
+  constructor(value: string, errorMessage: string) {
     super()
-    this.message = message
-    this.complete = true // Error doesn't need arguments
+    this.value = value
+    this.error = errorMessage
+    this.complete = true // Unknown doesn't need arguments
   }
 
   View(): string {
-    return `Error: ${this.message}`
+    return this.value
   }
 
   Color(): Color {
@@ -362,10 +375,87 @@ export class Str extends Idea {
   }
 }
 
+// Unquoted idea - stores unquoted string values
+export class Unquoted extends Idea {
+  valueKind = Kind.Unquoted
+  value: string
+
+  constructor(match: string) {
+    super()
+    this.value = match
+    this.complete = true
+  }
+
+  View(): string {
+    return this.value
+  }
+
+  Color(): Color {
+    return Color.Unquoted
+  }
+
+  Draw(ctx: DrawContext): void {
+    ctx.write(this.View(), this.Color())
+  }
+}
+
+// Label idea - marks a value with a name (infix colon operator)
+export class Label extends Idea {
+  valueKind = Kind.Label
+  name: string | null = null
+  labeled: Idea | null = null
+
+  constructor() {
+    super()
+    this.precedence = 1 // Very low - only higher than append (0)
+  }
+
+  consumePre(prev: Idea): Idea | null {
+    if (prev.valueKind === Kind.Unquoted) {
+      this.name = (prev as Unquoted).value
+      return this
+    }
+    return null
+  }
+
+  consumePost(next: Idea): boolean {
+    this.labeled = next
+    this.complete = true
+    return true
+  }
+
+  View(): string {
+    const nameStr = this.name ?? "_"
+    const labeledStr = this.labeled ? this.labeled.View() : "_"
+    return nameStr + ":" + labeledStr
+  }
+
+  Color(): Color {
+    if (this.error !== null) return Color.Error
+    return Color.Label
+  }
+
+  Draw(ctx: DrawContext): void {
+    if (this.name !== null) {
+      ctx.write(this.name + ":", this.Color())
+      ctx.write(" ", this.Color())
+    } else {
+      ctx.write("_:", this.Color())
+      ctx.write(" ", this.Color())
+    }
+    if (this.labeled !== null) {
+      this.labeled.Draw(ctx)
+    } else {
+      ctx.write("_", this.Color())
+    }
+  }
+}
+
 // List idea - contains sequence of ideas
 export class List extends Idea {
   valueKind = Kind.List
   items: Idea[] = []
+  labelMap: Map<string, Label> = new Map() // name → Label (fast lookup)
   breakpoint: number = -1 // -1: horizontal, 0: break immediately (vertical), >0: break after nth element
 
   constructor() {
@@ -375,6 +465,16 @@ export class List extends Idea {
 
   append(idea: Idea) {
     this.items.push(idea)
+
+    // If it's a Label, add to labelMap for fast lookup
+    if (idea instanceof Label && idea.name !== null) {
+      // Check for duplicate labels
+      if (this.labelMap.has(idea.name)) {
+        idea.error = `Duplicate label: ${idea.name}`
+      } else {
+        this.labelMap.set(idea.name, idea)
+      }
+    }
   }
 
   View(): string {
@@ -509,7 +609,8 @@ export class Add extends Idea {
 
   Draw(ctx: DrawContext): void {
     if (this.left !== null) {
-      const needsParens = this.left.precedence > 0 && this.left.precedence < this.precedence
+      const needsParens =
+        this.left.precedence > 0 && this.left.precedence < this.precedence
       if (needsParens) ctx.write("(", Color.List)
       this.left.Draw(ctx)
       if (needsParens) ctx.write(")", Color.List)
@@ -518,7 +619,8 @@ export class Add extends Idea {
     }
     ctx.write("+", this.Color())
     if (this.right !== null) {
-      const needsParens = this.right.precedence > 0 && this.right.precedence < this.precedence
+      const needsParens =
+        this.right.precedence > 0 && this.right.precedence < this.precedence
       if (needsParens) ctx.write("(", Color.List)
       this.right.Draw(ctx)
       if (needsParens) ctx.write(")", Color.List)
@@ -571,7 +673,8 @@ export class Mul extends Idea {
 
   Draw(ctx: DrawContext): void {
     if (this.left !== null) {
-      const needsParens = this.left.precedence > 0 && this.left.precedence < this.precedence
+      const needsParens =
+        this.left.precedence > 0 && this.left.precedence < this.precedence
       if (needsParens) ctx.write("(", Color.List)
       this.left.Draw(ctx)
       if (needsParens) ctx.write(")", Color.List)
@@ -580,7 +683,8 @@ export class Mul extends Idea {
     }
     ctx.write("*", this.Color())
     if (this.right !== null) {
-      const needsParens = this.right.precedence > 0 && this.right.precedence < this.precedence
+      const needsParens =
+        this.right.precedence > 0 && this.right.precedence < this.precedence
       if (needsParens) ctx.write("(", Color.List)
       this.right.Draw(ctx)
       if (needsParens) ctx.write(")", Color.List)

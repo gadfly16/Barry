@@ -1490,11 +1490,10 @@ the goalie of course. Anyway, Barry likes waterpolo much better. In theory.
 ### Rip
 
 The Reaper, or just Rip for his friends, wears a black hooded rope that shadows
-it's face all the time and walks with a scythe all the time, which is kind of
-strange. If it even has a face, we don't know. Anyway, everybody avoids Rip for
-some reason. Surprisingly Rip is kind of bubbly despite all the loneliness,
-probably for the succsess of the travel agency it runs, that specializes on one
-way trips.
+it's face and walks with a scythe all the time, which is kind of strange. If it
+even has a face, we don't know. Anyway, everybody avoids Rip for some reason.
+Surprisingly Rip is kind of bubbly despite all the loneliness, probably for the
+succsess of the travel agency it runs, that specializes on one way trips.
 
 ### Stella
 
@@ -1584,3 +1583,4 @@ of Barry.
 - Barry - Time travel for the rest of us
 - Barry - Leading the industry in entertainment value
 - Barry - Makes your brain a quantum computer
+- Barry - No errors, no error handling

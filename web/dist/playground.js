@@ -2,20 +2,24 @@
 var Kind = /* @__PURE__ */ ((Kind2) => {
   Kind2["Num"] = "Num";
   Kind2["Str"] = "Str";
+  Kind2["Unquoted"] = "Unquoted";
+  Kind2["Label"] = "Label";
   Kind2["List"] = "List";
   Kind2["Nothing"] = "Bit";
-  Kind2["Err"] = "Err";
+  Kind2["Unknown"] = "Unknown";
   return Kind2;
 })(Kind || {});
 var Color = /* @__PURE__ */ ((Color2) => {
   Color2["Number"] = "#a6da95";
-  Color2["String"] = "#eed49f";
+  Color2["String"] = "#ffb0b0";
+  Color2["Unquoted"] = "#eed49f";
+  Color2["Label"] = "#CC55EE";
   Color2["List"] = "#5da4f4";
   Color2["Operator"] = "#c680f6";
-  Color2["Error"] = "#fc4b28";
+  Color2["Error"] = "#FF4422";
   return Color2;
 })(Color || {});
-var TOKEN_PATTERN = /(?:"(?<quoted>[^"]*)"|(?<open>\()|(?<close>\))|(?<number>-?\d+\.?\d*)|(?<seal>[^\w\s"()]+)|(?<string>\S+)|(?<append>\s+))/g;
+var TOKEN_PATTERN = /(?:"(?<quoted>[^"]*)"|(?<list>\()|(?<closure>\))|(?<number>-?\d+\.?\d*)|(?<seal>[^\w\s"()]+)|(?<unquoted>[^:\s]+)|(?<append>\s+))/g;
 function LineView(idea) {
   if (idea instanceof List) {
     return idea.LineView();
@@ -48,7 +52,8 @@ Input: "${input}"`);
 }
 var SealMap = /* @__PURE__ */ new Map([
   ["+", () => new Add()],
-  ["*", () => new Mul()]
+  ["*", () => new Mul()],
+  [":", () => new Label()]
 ]);
 var NameMap = /* @__PURE__ */ new Map([]);
 var Parser = class {
@@ -69,12 +74,15 @@ var Parser = class {
         return SealMap.get(candidate)();
       }
     }
-    const errorIdea = new Err(`Unknown seal: ${sealString[0]}`);
+    const unknownIdea = new Unknown(
+      sealString[0],
+      `Unknown seal: ${sealString[0]}`
+    );
     this.tokens.push({
       endIndex: matchEndPos,
-      idea: errorIdea
+      idea: unknownIdea
     });
-    return errorIdea;
+    return unknownIdea;
   }
   // Entry point for parsing - handles root list with special processing
   start(input) {
@@ -122,15 +130,15 @@ var Parser = class {
       idea = new Num(match.groups.number);
     } else if (match.groups.quoted !== void 0) {
       idea = new Str(match.groups.quoted);
-    } else if (match.groups.open !== void 0) {
+    } else if (match.groups.list !== void 0) {
       idea = new List();
-    } else if (match.groups.close !== void 0) {
+    } else if (match.groups.closure !== void 0) {
       idea = new Closure();
-    } else if (match.groups.string !== void 0) {
-      if (NameMap.has(match.groups.string)) {
-        idea = NameMap.get(match.groups.string)();
+    } else if (match.groups.unquoted !== void 0) {
+      if (NameMap.has(match.groups.unquoted)) {
+        idea = NameMap.get(match.groups.unquoted)();
       } else {
-        idea = new Str(match.groups.string);
+        idea = new Unquoted(match.groups.unquoted);
       }
     } else if (match.groups.seal !== void 0) {
       idea = this.parseSeal(match.groups.seal, this.regex.lastIndex);
@@ -156,6 +164,7 @@ var Parser = class {
         return null;
       }
       idea = consumed;
+      this.tokens.splice(this.tokens.length - 2, 1);
     }
     if (idea instanceof Closure) {
       return idea;
@@ -204,24 +213,27 @@ var Idea = class {
   precedence = 0;
   finished = false;
   complete = false;
+  // Ideas are incomplete by default
+  error = null;
   // Default: ideas don't consume pre (return null)
   consumePre(prev) {
     return null;
   }
 };
-var Err = class extends Idea {
-  valueKind = "Err" /* Err */;
-  message;
-  constructor(message) {
+var Unknown = class extends Idea {
+  valueKind = "Unknown" /* Unknown */;
+  value;
+  constructor(value, errorMessage) {
     super();
-    this.message = message;
+    this.value = value;
+    this.error = errorMessage;
     this.complete = true;
   }
   View() {
-    return `Error: ${this.message}`;
+    return this.value;
   }
   Color() {
-    return "#fc4b28" /* Error */;
+    return "#FF4422" /* Error */;
   }
   Draw(ctx) {
     ctx.write(this.View(), this.Color());
@@ -257,15 +269,79 @@ var Str = class extends Idea {
     return '"' + this.value + '"';
   }
   Color() {
-    return "#eed49f" /* String */;
+    return "#ffb0b0" /* String */;
   }
   Draw(ctx) {
     ctx.write(this.View(), this.Color());
   }
 };
+var Unquoted = class extends Idea {
+  valueKind = "Unquoted" /* Unquoted */;
+  value;
+  constructor(match) {
+    super();
+    this.value = match;
+    this.complete = true;
+  }
+  View() {
+    return this.value;
+  }
+  Color() {
+    return "#eed49f" /* Unquoted */;
+  }
+  Draw(ctx) {
+    ctx.write(this.View(), this.Color());
+  }
+};
+var Label = class extends Idea {
+  valueKind = "Label" /* Label */;
+  name = null;
+  labeled = null;
+  constructor() {
+    super();
+    this.precedence = 1;
+  }
+  consumePre(prev) {
+    if (prev.valueKind === "Unquoted" /* Unquoted */) {
+      this.name = prev.value;
+      return this;
+    }
+    return null;
+  }
+  consumePost(next) {
+    this.labeled = next;
+    this.complete = true;
+    return true;
+  }
+  View() {
+    const nameStr = this.name ?? "_";
+    const labeledStr = this.labeled ? this.labeled.View() : "_";
+    return nameStr + ":" + labeledStr;
+  }
+  Color() {
+    if (this.error !== null) return "#FF4422" /* Error */;
+    return "#CC55EE" /* Label */;
+  }
+  Draw(ctx) {
+    if (this.name !== null) {
+      ctx.write(this.name + ":", this.Color());
+      ctx.write(" ", this.Color());
+    } else {
+      ctx.write("_:", this.Color());
+      ctx.write(" ", this.Color());
+    }
+    if (this.labeled !== null) {
+      this.labeled.Draw(ctx);
+    } else {
+      ctx.write("_", this.Color());
+    }
+  }
+};
 var List = class extends Idea {
   valueKind = "List" /* List */;
   items = [];
+  labelMap = /* @__PURE__ */ new Map();
+  // name → Label (fast lookup)
   breakpoint = -1;
   // -1: horizontal, 0: break immediately (vertical), >0: break after nth element
   constructor() {
@@ -274,6 +350,13 @@ var List = class extends Idea {
   }
   append(idea) {
     this.items.push(idea);
+    if (idea instanceof Label && idea.name !== null) {
+      if (this.labelMap.has(idea.name)) {
+        idea.error = `Duplicate label: ${idea.name}`;
+      } else {
+        this.labelMap.set(idea.name, idea);
+      }
+    }
   }
   View() {
     return "(" + this.items.map((item) => item.View()).join(" ") + ")";
@@ -335,7 +418,7 @@ var Closure = class extends Idea {
     throw new Error("Closure should never appear in AST");
   }
   Color() {
-    return "#fc4b28" /* Error */;
+    return "#FF4422" /* Error */;
   }
   Draw(ctx) {
     throw new Error("Closure should never appear in AST");
