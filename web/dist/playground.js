@@ -7,6 +7,14 @@ var Kind = /* @__PURE__ */ ((Kind2) => {
   Kind2["Err"] = "Err";
   return Kind2;
 })(Kind || {});
+var Color = /* @__PURE__ */ ((Color2) => {
+  Color2["Number"] = "#a6da95";
+  Color2["String"] = "#eed49f";
+  Color2["List"] = "#5da4f4";
+  Color2["Operator"] = "#c680f6";
+  Color2["Error"] = "#fc4b28";
+  return Color2;
+})(Color || {});
 var TOKEN_PATTERN = /(?:"(?<quoted>[^"]*)"|(?<open>\()|(?<close>\))|(?<number>-?\d+\.?\d*)|(?<seal>[^\w\s"()]+)|(?<string>\S+)|(?<append>\s+))/g;
 function LineView(idea) {
   if (idea instanceof List) {
@@ -38,7 +46,10 @@ Input: "${input}"`);
   }
   console.log("\n=== Tests Complete ===");
 }
-var SealMap = /* @__PURE__ */ new Map([["+", () => new Add()]]);
+var SealMap = /* @__PURE__ */ new Map([
+  ["+", () => new Add()],
+  ["*", () => new Mul()]
+]);
 var NameMap = /* @__PURE__ */ new Map([]);
 var Parser = class {
   regex;
@@ -210,7 +221,7 @@ var Err = class extends Idea {
     return `Error: ${this.message}`;
   }
   Color() {
-    return "#fc4b28";
+    return "#fc4b28" /* Error */;
   }
   Draw(ctx) {
     ctx.write(this.View(), this.Color());
@@ -228,7 +239,7 @@ var Num = class extends Idea {
     return this.value.toString();
   }
   Color() {
-    return "#a6da95";
+    return "#a6da95" /* Number */;
   }
   Draw(ctx) {
     ctx.write(this.View(), this.Color());
@@ -246,7 +257,7 @@ var Str = class extends Idea {
     return '"' + this.value + '"';
   }
   Color() {
-    return "#eed49f";
+    return "#eed49f" /* String */;
   }
   Draw(ctx) {
     ctx.write(this.View(), this.Color());
@@ -271,7 +282,7 @@ var List = class extends Idea {
     return this.items.map((item) => item.View()).join(" ");
   }
   Color() {
-    return "#5da4f4";
+    return "#5da4f4" /* List */;
   }
   Draw(ctx) {
     const showParens = !ctx.lineStart;
@@ -309,7 +320,7 @@ var Nothing = class extends Idea {
     return "()";
   }
   Color() {
-    return "#7dc4e4";
+    return "#5da4f4" /* List */;
   }
   Draw(ctx) {
     ctx.write(this.View(), this.Color());
@@ -324,7 +335,7 @@ var Closure = class extends Idea {
     throw new Error("Closure should never appear in AST");
   }
   Color() {
-    return "#ff00ff";
+    return "#fc4b28" /* Error */;
   }
   Draw(ctx) {
     throw new Error("Closure should never appear in AST");
@@ -361,17 +372,76 @@ var Add = class extends Idea {
     return leftArg + "+" + rightArg;
   }
   Color() {
-    return "#c680f6";
+    return "#c680f6" /* Operator */;
   }
   Draw(ctx) {
     if (this.left !== null) {
+      const needsParens = this.left.precedence > 0 && this.left.precedence < this.precedence;
+      if (needsParens) ctx.write("(", "#5da4f4" /* List */);
       this.left.Draw(ctx);
+      if (needsParens) ctx.write(")", "#5da4f4" /* List */);
     } else {
       ctx.write("_", this.Color());
     }
     ctx.write("+", this.Color());
     if (this.right !== null) {
+      const needsParens = this.right.precedence > 0 && this.right.precedence < this.precedence;
+      if (needsParens) ctx.write("(", "#5da4f4" /* List */);
       this.right.Draw(ctx);
+      if (needsParens) ctx.write(")", "#5da4f4" /* List */);
+    } else {
+      ctx.write("_", this.Color());
+    }
+  }
+};
+var Mul = class extends Idea {
+  valueKind = "Num" /* Num */;
+  left = null;
+  right = null;
+  constructor() {
+    super();
+    this.precedence = 20;
+  }
+  consumePre(prev) {
+    if (prev.valueKind === "Num" /* Num */) {
+      this.left = prev;
+      return this;
+    }
+    return null;
+  }
+  consumePost(next) {
+    if (next.valueKind === "Num" /* Num */) {
+      this.right = next;
+      if (this.left !== null) {
+        this.complete = true;
+      }
+      return true;
+    }
+    return false;
+  }
+  View() {
+    const leftArg = this.left === null ? "_" : this.left.View();
+    const rightArg = this.right === null ? "_" : this.right.View();
+    return leftArg + "*" + rightArg;
+  }
+  Color() {
+    return "#c680f6" /* Operator */;
+  }
+  Draw(ctx) {
+    if (this.left !== null) {
+      const needsParens = this.left.precedence > 0 && this.left.precedence < this.precedence;
+      if (needsParens) ctx.write("(", "#5da4f4" /* List */);
+      this.left.Draw(ctx);
+      if (needsParens) ctx.write(")", "#5da4f4" /* List */);
+    } else {
+      ctx.write("_", this.Color());
+    }
+    ctx.write("*", this.Color());
+    if (this.right !== null) {
+      const needsParens = this.right.precedence > 0 && this.right.precedence < this.precedence;
+      if (needsParens) ctx.write("(", "#5da4f4" /* List */);
+      this.right.Draw(ctx);
+      if (needsParens) ctx.write(")", "#5da4f4" /* List */);
     } else {
       ctx.write("_", this.Color());
     }

@@ -12,6 +12,15 @@ export enum Kind {
   Err = "Err",
 }
 
+// Enum for syntax colors
+export enum Color {
+  Number = "#a6da95",   // Green
+  String = "#eed49f",   // Yellow
+  List = "#5da4f4",     // Blue (lists/parens)
+  Operator = "#c680f6", // Purple
+  Error = "#fc4b28",    // Red
+}
+
 // Combined regex pattern for token matching with global flag
 // Order matters: quoted strings, wraps (parens), numbers, seals, unquoted strings, whitespace
 const TOKEN_PATTERN =
@@ -54,7 +63,10 @@ export function Test() {
 }
 
 // Seal map - maps seal strings to their idea constructors
-const SealMap = new Map<string, () => Idea>([["+", () => new Add()]])
+const SealMap = new Map<string, () => Idea>([
+  ["+", () => new Add()],
+  ["*", () => new Mul()],
+])
 
 // Name map - maps unquoted strings to their idea constructors
 const NameMap = new Map<string, () => Idea>([])
@@ -274,7 +286,7 @@ export abstract class Idea {
   }
 
   abstract View(): string
-  abstract Color(): string
+  abstract Color(): Color
   abstract Draw(ctx: DrawContext): void
 }
 
@@ -293,8 +305,8 @@ export class Err extends Idea {
     return `Error: ${this.message}`
   }
 
-  Color(): string {
-    return "#fc4b28" // Red for errors
+  Color(): Color {
+    return Color.Error
   }
 
   Draw(ctx: DrawContext): void {
@@ -317,8 +329,8 @@ export class Num extends Idea {
     return this.value.toString()
   }
 
-  Color(): string {
-    return "#a6da95" // Green for numbers
+  Color(): Color {
+    return Color.Number
   }
 
   Draw(ctx: DrawContext): void {
@@ -341,8 +353,8 @@ export class Str extends Idea {
     return '"' + this.value + '"'
   }
 
-  Color(): string {
-    return "#eed49f" // Yellow for strings
+  Color(): Color {
+    return Color.String
   }
 
   Draw(ctx: DrawContext): void {
@@ -373,8 +385,8 @@ export class List extends Idea {
     return this.items.map((item) => item.View()).join(" ")
   }
 
-  Color(): string {
-    return "#5da4f4" // Blue for lists/parens
+  Color(): Color {
+    return Color.List
   }
 
   Draw(ctx: DrawContext): void {
@@ -424,8 +436,8 @@ export class Nothing extends Idea {
     return "()"
   }
 
-  Color(): string {
-    return "#7dc4e4" // Brighter blue like lists
+  Color(): Color {
+    return Color.List
   }
 
   Draw(ctx: DrawContext): void {
@@ -445,8 +457,8 @@ export class Closure extends Idea {
     throw new Error("Closure should never appear in AST")
   }
 
-  Color(): string {
-    return "#ff00ff" // Magenta (should never be visible)
+  Color(): Color {
+    return Color.Error // Should never be visible
   }
 
   Draw(ctx: DrawContext): void {
@@ -491,19 +503,87 @@ export class Add extends Idea {
     return leftArg + "+" + rightArg
   }
 
-  Color(): string {
-    return "#c680f6" // Purple for operators
+  Color(): Color {
+    return Color.Operator
   }
 
   Draw(ctx: DrawContext): void {
     if (this.left !== null) {
+      const needsParens = this.left.precedence > 0 && this.left.precedence < this.precedence
+      if (needsParens) ctx.write("(", Color.List)
       this.left.Draw(ctx)
+      if (needsParens) ctx.write(")", Color.List)
     } else {
       ctx.write("_", this.Color())
     }
     ctx.write("+", this.Color())
     if (this.right !== null) {
+      const needsParens = this.right.precedence > 0 && this.right.precedence < this.precedence
+      if (needsParens) ctx.write("(", Color.List)
       this.right.Draw(ctx)
+      if (needsParens) ctx.write(")", Color.List)
+    } else {
+      ctx.write("_", this.Color())
+    }
+  }
+}
+
+// Mul idea - multiplication operator
+export class Mul extends Idea {
+  valueKind = Kind.Num
+  left: Idea | null = null
+  right: Idea | null = null
+
+  constructor() {
+    super()
+    this.precedence = 20
+  }
+
+  consumePre(prev: Idea): Idea | null {
+    if (prev.valueKind === Kind.Num) {
+      this.left = prev
+      return this
+    }
+    return null
+  }
+
+  consumePost(next: Idea): boolean {
+    if (next.valueKind === Kind.Num) {
+      this.right = next
+      // Only complete when both left and right are filled
+      if (this.left !== null) {
+        this.complete = true
+      }
+      return true
+    }
+    return false
+  }
+
+  View(): string {
+    const leftArg = this.left === null ? "_" : this.left.View()
+    const rightArg = this.right === null ? "_" : this.right.View()
+    return leftArg + "*" + rightArg
+  }
+
+  Color(): Color {
+    return Color.Operator
+  }
+
+  Draw(ctx: DrawContext): void {
+    if (this.left !== null) {
+      const needsParens = this.left.precedence > 0 && this.left.precedence < this.precedence
+      if (needsParens) ctx.write("(", Color.List)
+      this.left.Draw(ctx)
+      if (needsParens) ctx.write(")", Color.List)
+    } else {
+      ctx.write("_", this.Color())
+    }
+    ctx.write("*", this.Color())
+    if (this.right !== null) {
+      const needsParens = this.right.precedence > 0 && this.right.precedence < this.precedence
+      if (needsParens) ctx.write("(", Color.List)
+      this.right.Draw(ctx)
+      if (needsParens) ctx.write(")", Color.List)
     } else {
       ctx.write("_", this.Color())
     }
