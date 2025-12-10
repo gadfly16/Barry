@@ -12,6 +12,7 @@ export enum Kind {
   List = "List",
   Nothing = "Bit",
   Unknown = "Unknown",
+  Operator = "Operator",
 }
 
 // Enum for syntax colors
@@ -19,7 +20,7 @@ export enum Color {
   Number = "#a6da95",
   String = "#ffb0b0",
   Unquoted = "#eed49f",
-  Label = "#CC55EE",
+  Label = "#44BBEE",
   List = "#5da4f4",
   Operator = "#c680f6",
   Error = "#FF4422",
@@ -597,7 +598,7 @@ export class Closure extends Idea {
 
 // Add idea - addition operator
 export class Add extends Idea {
-  returnKind = Kind.Num
+  returnKind = Kind.Operator
   left: Idea | null = null
   right: Idea | null = null
 
@@ -620,6 +621,7 @@ export class Add extends Idea {
       // Only complete when both left and right are filled
       if (this.left !== null) {
         this.complete = true
+        this.returnKind = Kind.Num
       }
       return true
     }
@@ -661,7 +663,7 @@ export class Add extends Idea {
 
 // Mul idea - multiplication operator
 export class Mul extends Idea {
-  returnKind = Kind.Num
+  returnKind = Kind.Operator
   left: Idea | null = null
   right: Idea | null = null
 
@@ -684,6 +686,7 @@ export class Mul extends Idea {
       // Only complete when both left and right are filled
       if (this.left !== null) {
         this.complete = true
+        this.returnKind = Kind.Num
       }
       return true
     }

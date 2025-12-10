@@ -7,13 +7,14 @@ var Kind = /* @__PURE__ */ ((Kind2) => {
   Kind2["List"] = "List";
   Kind2["Nothing"] = "Bit";
   Kind2["Unknown"] = "Unknown";
+  Kind2["Operator"] = "Operator";
   return Kind2;
 })(Kind || {});
 var Color = /* @__PURE__ */ ((Color2) => {
   Color2["Number"] = "#a6da95";
   Color2["String"] = "#ffb0b0";
   Color2["Unquoted"] = "#eed49f";
-  Color2["Label"] = "#CC55EE";
+  Color2["Label"] = "#44BBEE";
   Color2["List"] = "#5da4f4";
   Color2["Operator"] = "#c680f6";
   Color2["Error"] = "#FF4422";
@@ -341,7 +342,7 @@ var Label = class extends Idea {
   }
   Color() {
     if (this.error !== null) return "#FF4422" /* Error */;
-    return "#CC55EE" /* Label */;
+    return "#44BBEE" /* Label */;
   }
   Draw(ctx) {
     if (this.name !== null) {
@@ -446,7 +447,7 @@ var Closure = class extends Idea {
   }
 };
 var Add = class extends Idea {
-  returnKind = "Num" /* Num */;
+  returnKind = "Operator" /* Operator */;
   left = null;
   right = null;
   constructor() {
@@ -465,6 +466,7 @@ var Add = class extends Idea {
       this.right = next;
       if (this.left !== null) {
         this.complete = true;
+        this.returnKind = "Num" /* Num */;
       }
       return true;
     }
@@ -499,7 +501,7 @@ var Add = class extends Idea {
   }
 };
 var Mul = class extends Idea {
-  returnKind = "Num" /* Num */;
+  returnKind = "Operator" /* Operator */;
   left = null;
   right = null;
   constructor() {
@@ -518,6 +520,7 @@ var Mul = class extends Idea {
       this.right = next;
       if (this.left !== null) {
         this.complete = true;
+        this.returnKind = "Num" /* Num */;
       }
       return true;
     }
