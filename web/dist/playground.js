@@ -69,17 +69,36 @@ var Parser = class {
     for (let len = sealString.length; len > 0; len--) {
       const candidate = sealString.substring(0, len);
       if (SealMap.has(candidate)) {
-        const consumedLength = len;
-        this.regex.lastIndex = matchEndPos - sealString.length + consumedLength;
+        const consumedLength2 = len;
+        this.regex.lastIndex = matchEndPos - sealString.length + consumedLength2;
         return SealMap.get(candidate)();
       }
     }
+    let unknownBuffer = sealString[0];
+    let consumedLength = 1;
+    for (let i = 1; i < sealString.length; i++) {
+      const remaining = sealString.substring(i);
+      let foundMatch = false;
+      for (let len = remaining.length; len > 0; len--) {
+        const candidate = remaining.substring(0, len);
+        if (SealMap.has(candidate)) {
+          foundMatch = true;
+          break;
+        }
+      }
+      if (foundMatch) {
+        break;
+      }
+      unknownBuffer += sealString[i];
+      consumedLength++;
+    }
+    this.regex.lastIndex = matchEndPos - sealString.length + consumedLength;
     const unknownIdea = new Unknown(
-      sealString[0],
-      `Unknown seal: ${sealString[0]}`
+      unknownBuffer,
+      `Unknown seal: ${unknownBuffer}`
     );
     this.tokens.push({
-      endIndex: matchEndPos,
+      endIndex: this.regex.lastIndex,
       idea: unknownIdea
     });
     return unknownIdea;
@@ -164,7 +183,9 @@ var Parser = class {
         return null;
       }
       idea = consumed;
-      this.tokens.splice(this.tokens.length - 2, 1);
+      if (idea instanceof Label) {
+        this.tokens.splice(this.tokens.length - 2, 1);
+      }
     }
     if (idea instanceof Closure) {
       return idea;
@@ -221,7 +242,7 @@ var Idea = class {
   }
 };
 var Unknown = class extends Idea {
-  valueKind = "Unknown" /* Unknown */;
+  returnKind = "Unknown" /* Unknown */;
   value;
   constructor(value, errorMessage) {
     super();
@@ -236,11 +257,11 @@ var Unknown = class extends Idea {
     return "#FF4422" /* Error */;
   }
   Draw(ctx) {
-    ctx.write(this.View(), this.Color());
+    ctx.write(this.View(), this.Color(), this);
   }
 };
 var Num = class extends Idea {
-  valueKind = "Num" /* Num */;
+  returnKind = "Num" /* Num */;
   value;
   constructor(match) {
     super();
@@ -254,11 +275,11 @@ var Num = class extends Idea {
     return "#a6da95" /* Number */;
   }
   Draw(ctx) {
-    ctx.write(this.View(), this.Color());
+    ctx.write(this.View(), this.Color(), this);
   }
 };
 var Str = class extends Idea {
-  valueKind = "Str" /* Str */;
+  returnKind = "Str" /* Str */;
   value;
   constructor(match) {
     super();
@@ -272,11 +293,11 @@ var Str = class extends Idea {
     return "#ffb0b0" /* String */;
   }
   Draw(ctx) {
-    ctx.write(this.View(), this.Color());
+    ctx.write(this.View(), this.Color(), this);
   }
 };
 var Unquoted = class extends Idea {
-  valueKind = "Unquoted" /* Unquoted */;
+  returnKind = "Unquoted" /* Unquoted */;
   value;
   constructor(match) {
     super();
@@ -290,11 +311,11 @@ var Unquoted = class extends Idea {
     return "#eed49f" /* Unquoted */;
   }
   Draw(ctx) {
-    ctx.write(this.View(), this.Color());
+    ctx.write(this.View(), this.Color(), this);
   }
 };
 var Label = class extends Idea {
-  valueKind = "Label" /* Label */;
+  returnKind = "Label" /* Label */;
   name = null;
   labeled = null;
   constructor() {
@@ -302,7 +323,7 @@ var Label = class extends Idea {
     this.precedence = 1;
   }
   consumePre(prev) {
-    if (prev.valueKind === "Unquoted" /* Unquoted */) {
+    if (prev.returnKind === "Unquoted" /* Unquoted */) {
       this.name = prev.value;
       return this;
     }
@@ -324,21 +345,21 @@ var Label = class extends Idea {
   }
   Draw(ctx) {
     if (this.name !== null) {
-      ctx.write(this.name + ":", this.Color());
-      ctx.write(" ", this.Color());
+      ctx.write(this.name + ":", this.Color(), this);
+      ctx.write(" ", this.Color(), this);
     } else {
-      ctx.write("_:", this.Color());
-      ctx.write(" ", this.Color());
+      ctx.write("_:", this.Color(), this);
+      ctx.write(" ", this.Color(), this);
     }
     if (this.labeled !== null) {
       this.labeled.Draw(ctx);
     } else {
-      ctx.write("_", this.Color());
+      ctx.write("_", this.Color(), this);
     }
   }
 };
 var List = class extends Idea {
-  valueKind = "List" /* List */;
+  returnKind = "List" /* List */;
   items = [];
   labelMap = /* @__PURE__ */ new Map();
   // name → Label (fast lookup)
@@ -370,7 +391,7 @@ var List = class extends Idea {
   Draw(ctx) {
     const showParens = !ctx.lineStart;
     if (showParens) {
-      ctx.write("(", this.Color());
+      ctx.write("(", this.Color(), this);
     } else if (this.breakpoint === -1) {
       ctx.lineStart = false;
     }
@@ -384,17 +405,17 @@ var List = class extends Idea {
       for (let i = 0; i < this.items.length; i++) {
         this.items[i].Draw(ctx);
         if (i < this.items.length - 1) {
-          ctx.write(" ", this.Color());
+          ctx.write(" ", this.Color(), this);
         }
       }
     }
     if (showParens) {
-      ctx.write(")", this.Color());
+      ctx.write(")", this.Color(), this);
     }
   }
 };
 var Nothing = class extends Idea {
-  valueKind = "Bit" /* Nothing */;
+  returnKind = "Bit" /* Nothing */;
   constructor() {
     super();
     this.complete = true;
@@ -406,11 +427,11 @@ var Nothing = class extends Idea {
     return "#5da4f4" /* List */;
   }
   Draw(ctx) {
-    ctx.write(this.View(), this.Color());
+    ctx.write(this.View(), this.Color(), this);
   }
 };
 var Closure = class extends Idea {
-  valueKind = "Bit" /* Nothing */;
+  returnKind = "Bit" /* Nothing */;
   constructor() {
     super();
   }
@@ -425,7 +446,7 @@ var Closure = class extends Idea {
   }
 };
 var Add = class extends Idea {
-  valueKind = "Num" /* Num */;
+  returnKind = "Num" /* Num */;
   left = null;
   right = null;
   constructor() {
@@ -433,14 +454,14 @@ var Add = class extends Idea {
     this.precedence = 10;
   }
   consumePre(prev) {
-    if (prev.valueKind === "Num" /* Num */) {
+    if (prev.returnKind === "Num" /* Num */) {
       this.left = prev;
       return this;
     }
     return null;
   }
   consumePost(next) {
-    if (next.valueKind === "Num" /* Num */) {
+    if (next.returnKind === "Num" /* Num */) {
       this.right = next;
       if (this.left !== null) {
         this.complete = true;
@@ -460,25 +481,25 @@ var Add = class extends Idea {
   Draw(ctx) {
     if (this.left !== null) {
       const needsParens = this.left.precedence > 0 && this.left.precedence < this.precedence;
-      if (needsParens) ctx.write("(", "#5da4f4" /* List */);
+      if (needsParens) ctx.write("(", "#5da4f4" /* List */, this);
       this.left.Draw(ctx);
-      if (needsParens) ctx.write(")", "#5da4f4" /* List */);
+      if (needsParens) ctx.write(")", "#5da4f4" /* List */, this);
     } else {
-      ctx.write("_", this.Color());
+      ctx.write("_", this.Color(), this);
     }
-    ctx.write("+", this.Color());
+    ctx.write("+", this.Color(), this);
     if (this.right !== null) {
       const needsParens = this.right.precedence > 0 && this.right.precedence < this.precedence;
-      if (needsParens) ctx.write("(", "#5da4f4" /* List */);
+      if (needsParens) ctx.write("(", "#5da4f4" /* List */, this);
       this.right.Draw(ctx);
-      if (needsParens) ctx.write(")", "#5da4f4" /* List */);
+      if (needsParens) ctx.write(")", "#5da4f4" /* List */, this);
     } else {
-      ctx.write("_", this.Color());
+      ctx.write("_", this.Color(), this);
     }
   }
 };
 var Mul = class extends Idea {
-  valueKind = "Num" /* Num */;
+  returnKind = "Num" /* Num */;
   left = null;
   right = null;
   constructor() {
@@ -486,14 +507,14 @@ var Mul = class extends Idea {
     this.precedence = 20;
   }
   consumePre(prev) {
-    if (prev.valueKind === "Num" /* Num */) {
+    if (prev.returnKind === "Num" /* Num */) {
       this.left = prev;
       return this;
     }
     return null;
   }
   consumePost(next) {
-    if (next.valueKind === "Num" /* Num */) {
+    if (next.returnKind === "Num" /* Num */) {
       this.right = next;
       if (this.left !== null) {
         this.complete = true;
@@ -513,20 +534,20 @@ var Mul = class extends Idea {
   Draw(ctx) {
     if (this.left !== null) {
       const needsParens = this.left.precedence > 0 && this.left.precedence < this.precedence;
-      if (needsParens) ctx.write("(", "#5da4f4" /* List */);
+      if (needsParens) ctx.write("(", "#5da4f4" /* List */, this);
       this.left.Draw(ctx);
-      if (needsParens) ctx.write(")", "#5da4f4" /* List */);
+      if (needsParens) ctx.write(")", "#5da4f4" /* List */, this);
     } else {
-      ctx.write("_", this.Color());
+      ctx.write("_", this.Color(), this);
     }
-    ctx.write("*", this.Color());
+    ctx.write("*", this.Color(), this);
     if (this.right !== null) {
       const needsParens = this.right.precedence > 0 && this.right.precedence < this.precedence;
-      if (needsParens) ctx.write("(", "#5da4f4" /* List */);
+      if (needsParens) ctx.write("(", "#5da4f4" /* List */, this);
       this.right.Draw(ctx);
-      if (needsParens) ctx.write(")", "#5da4f4" /* List */);
+      if (needsParens) ctx.write(")", "#5da4f4" /* List */, this);
     } else {
-      ctx.write("_", this.Color());
+      ctx.write("_", this.Color(), this);
     }
   }
 };
@@ -537,11 +558,25 @@ var DrawContext2 = class {
   col = 1;
   row = 1;
   lineStart = true;
-  constructor(console2) {
+  // Target coordinates for cursor detection (1-indexed)
+  targetCol = -1;
+  targetRow = -1;
+  // Idea under cursor (set during draw if coordinates match)
+  ideaUnderCursor = null;
+  constructor(console2, targetCol, targetRow) {
     this.console = console2;
+    this.targetCol = targetCol;
+    this.targetRow = targetRow;
   }
   // Write text at current position and advance cursor
-  write(text, color) {
+  write(text, color, idea) {
+    if (this.targetRow === this.row) {
+      const startCol = this.col;
+      const endCol = this.col + text.length - 1;
+      if (this.targetCol >= startCol && this.targetCol <= endCol) {
+        this.ideaUnderCursor = idea;
+      }
+    }
     this.console.drawText(text, this.col, this.row, color);
     this.col += text.length;
     this.lineStart = false;
@@ -589,6 +624,9 @@ var Console = class {
   cursorPosition = 0;
   history = [];
   historyIndex = -1;
+  // Mouse tracking - target cell coordinates
+  targetCol = -1;
+  targetRow = -1;
   constructor(canvasId, fontSize) {
     this.fontSize = fontSize;
     const canvas = document.getElementById(canvasId);
@@ -605,6 +643,7 @@ var Console = class {
     this.source.breakpoint = 0;
     this.initialize();
     this.setupKeyboardListeners();
+    this.setupMouseListeners();
     this.redrawCommandLine();
   }
   initialize() {
@@ -645,12 +684,12 @@ var Console = class {
     const height = this.charHeight;
     this.ctx.fillRect(0, y, this.canvas.width, height);
   }
-  // Draw text starting at console coordinates (col: 0-79, row: 1-24)
+  // Draw text starting at console coordinates (col: 1-80, row: 1-24)
   drawText(text, col, row, color) {
-    if (row < 1 || row > this.rows || col < 0 || col >= this.cols) {
+    if (row < 1 || row > this.rows || col < 1 || col > this.cols) {
       return;
     }
-    const x = col * this.charWidth;
+    const x = (col - 1) * this.charWidth;
     const y = (row - 1) * this.charHeight + this.charHeight / 2;
     this.ctx.fillStyle = color;
     this.ctx.fillText(text, x, y);
@@ -658,35 +697,61 @@ var Console = class {
   // Draw status line text (always on line 23)
   drawStatus(text) {
     this.clearStatus();
-    this.drawText(text, 0, 23, this.fgColor);
+    this.drawText(text, 1, 23, this.fgColor);
   }
   // Draw source section from source tree
   drawSource() {
     this.clearSource();
-    const ctx = new DrawContext2(this);
+    const ctx = new DrawContext2(this, this.targetCol, this.targetRow);
     this.source.Draw(ctx);
+    if (ctx.ideaUnderCursor !== null) {
+      const idea = ctx.ideaUnderCursor;
+      let status = `Kind: ${idea.constructor.name}`;
+      const value = this.getIdeaValue(idea);
+      if (value !== null) {
+        status += `  Value: ${value}`;
+      }
+      if (idea.error !== null) {
+        status += `  Error: ${idea.error}`;
+      }
+      this.drawStatus(status);
+    }
+  }
+  // Get displayable value from an idea (null if no value to display)
+  getIdeaValue(idea) {
+    if (idea instanceof Num) {
+      return idea.value.toString();
+    } else if (idea instanceof Str) {
+      return `"${idea.value}"`;
+    } else if (idea instanceof Unquoted) {
+      return idea.value;
+    } else if (idea instanceof Label && idea.name !== null) {
+      return idea.name;
+    }
+    return null;
   }
   // Draw command line with token-based coloring
   drawCommandLine(text, tokens, cursorPos) {
     this.clearCommand();
-    let startIdx = 0;
+    let startPos = 1;
     for (const token of tokens) {
-      const tokenText = text.slice(startIdx, token.endIndex);
+      const endPos = token.endIndex + 1;
+      const tokenText = text.slice(startPos - 1, endPos - 1);
       const color = token.idea.Color();
-      this.drawText(tokenText, startIdx, 24, color);
-      startIdx = token.endIndex;
+      this.drawText(tokenText, startPos, 24, color);
+      startPos = endPos;
     }
-    if (startIdx < text.length) {
-      this.drawText(text.slice(startIdx), startIdx, 24, "#6c7086");
+    if (startPos <= text.length) {
+      this.drawText(text.slice(startPos - 1), startPos, 24, "#6c7086");
     }
     this.drawCursor(cursorPos, 24);
   }
-  // Draw cursor at position
+  // Draw cursor at position (1-indexed column)
   drawCursor(col, row) {
-    if (row < 1 || row > this.rows || col < 0 || col >= this.cols) {
+    if (row < 1 || row > this.rows || col < 1 || col > this.cols) {
       return;
     }
-    const x = col * this.charWidth;
+    const x = (col - 1) * this.charWidth;
     const y = row * this.charHeight - 2;
     this.ctx.fillStyle = this.fgColor;
     this.ctx.fillRect(x, y, this.charWidth, 2);
@@ -710,6 +775,18 @@ var Console = class {
     document.addEventListener("keydown", (e) => {
       this.handleKeyDown(e);
     });
+  }
+  setupMouseListeners() {
+    this.canvas.addEventListener("mousemove", (e) => {
+      this.handleMouseMove(e);
+    });
+  }
+  handleMouseMove(e) {
+    const col = Math.floor(e.offsetX / this.charWidth) + 1;
+    const row = Math.floor(e.offsetY / this.charHeight) + 1;
+    this.targetCol = col;
+    this.targetRow = row;
+    this.drawSource();
   }
   handleKeyDown(e) {
     const handledKeys = [
@@ -854,7 +931,7 @@ var Console = class {
       );
     });
     const fullText = this.prompt + this.currentLine;
-    const cursorCol = this.prompt.length + this.cursorPosition;
+    const cursorCol = this.prompt.length + this.cursorPosition + 1;
     const adjustedTokens = tokens.map((t) => ({
       endIndex: t.endIndex + this.prompt.length,
       idea: t.idea

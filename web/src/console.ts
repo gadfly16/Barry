@@ -3,7 +3,7 @@
 // Line 23: Status line
 // Line 24: Command line
 
-import { Parser, LineView, Idea, List } from "./barry.js"
+import { Parser, LineView, Idea, List, Num, Str, Unquoted, Label } from "./barry.js"
 
 export interface TokenInfo {
   endIndex: number // End position in text
@@ -17,12 +17,31 @@ export class DrawContext {
   row: number = 1
   lineStart: boolean = true
 
-  constructor(console: Console) {
+  // Target coordinates for cursor detection (1-indexed)
+  targetCol: number = -1
+  targetRow: number = -1
+
+  // Idea under cursor (set during draw if coordinates match)
+  ideaUnderCursor: Idea | null = null
+
+  constructor(console: Console, targetCol: number, targetRow: number) {
     this.console = console
+    this.targetCol = targetCol
+    this.targetRow = targetRow
   }
 
   // Write text at current position and advance cursor
-  write(text: string, color: string): void {
+  write(text: string, color: string, idea: Idea): void {
+    // Check if we're drawing at the target coordinates
+    if (this.targetRow === this.row) {
+      // Check if target column falls within this text span
+      const startCol = this.col
+      const endCol = this.col + text.length - 1
+      if (this.targetCol >= startCol && this.targetCol <= endCol) {
+        this.ideaUnderCursor = idea
+      }
+    }
+
     this.console.drawText(text, this.col, this.row, color)
     this.col += text.length
     this.lineStart = false
@@ -78,6 +97,10 @@ export class Console {
   private history: string[] = []
   private historyIndex: number = -1
 
+  // Mouse tracking - target cell coordinates
+  private targetCol: number = -1
+  private targetRow: number = -1
+
   constructor(canvasId: string, fontSize: number) {
     this.fontSize = fontSize
 
@@ -101,6 +124,7 @@ export class Console {
 
     this.initialize()
     this.setupKeyboardListeners()
+    this.setupMouseListeners()
     this.redrawCommandLine()
   }
 
@@ -155,13 +179,13 @@ export class Console {
     this.ctx.fillRect(0, y, this.canvas.width, height)
   }
 
-  // Draw text starting at console coordinates (col: 0-79, row: 1-24)
+  // Draw text starting at console coordinates (col: 1-80, row: 1-24)
   drawText(text: string, col: number, row: number, color: string): void {
-    if (row < 1 || row > this.rows || col < 0 || col >= this.cols) {
+    if (row < 1 || row > this.rows || col < 1 || col > this.cols) {
       return // Out of bounds
     }
 
-    const x = col * this.charWidth
+    const x = (col - 1) * this.charWidth
     const y = (row - 1) * this.charHeight + this.charHeight / 2 // Middle of cell
 
     this.ctx.fillStyle = color
@@ -171,45 +195,82 @@ export class Console {
   // Draw status line text (always on line 23)
   drawStatus(text: string): void {
     this.clearStatus()
-    this.drawText(text, 0, 23, this.fgColor)
+    this.drawText(text, 1, 23, this.fgColor)
   }
 
   // Draw source section from source tree
   drawSource(): void {
     this.clearSource()
-    const ctx = new DrawContext(this)
+    const ctx = new DrawContext(this, this.targetCol, this.targetRow)
     this.source.Draw(ctx)
+
+    // Display info about idea under cursor
+    if (ctx.ideaUnderCursor !== null) {
+      const idea = ctx.ideaUnderCursor
+      let status = `Kind: ${idea.constructor.name}`
+
+      // Add value if present
+      const value = this.getIdeaValue(idea)
+      if (value !== null) {
+        status += `  Value: ${value}`
+      }
+
+      // Add error if present
+      if (idea.error !== null) {
+        status += `  Error: ${idea.error}`
+      }
+
+      this.drawStatus(status)
+    }
+  }
+
+  // Get displayable value from an idea (null if no value to display)
+  private getIdeaValue(idea: Idea): string | null {
+    if (idea instanceof Num) {
+      return idea.value.toString()
+    } else if (idea instanceof Str) {
+      return `"${idea.value}"`
+    } else if (idea instanceof Unquoted) {
+      return idea.value
+    } else if (idea instanceof Label && idea.name !== null) {
+      return idea.name
+    }
+    return null
   }
 
   // Draw command line with token-based coloring
   drawCommandLine(text: string, tokens: TokenInfo[], cursorPos: number): void {
     this.clearCommand()
 
-    // Draw text with token colors
-    let startIdx = 0
+    // Draw text with token colors (using 1-indexed positions)
+    let startPos = 1
     for (const token of tokens) {
-      const tokenText = text.slice(startIdx, token.endIndex)
+      // token.endIndex comes from parser as 0-indexed offset, convert to 1-indexed position
+      const endPos = token.endIndex + 1
+      // Convert 1-indexed positions to 0-indexed offsets for slicing
+      const tokenText = text.slice(startPos - 1, endPos - 1)
       const color = token.idea.Color()
-      this.drawText(tokenText, startIdx, 24, color)
-      startIdx = token.endIndex
+      this.drawText(tokenText, startPos, 24, color)
+      startPos = endPos
     }
 
     // Draw any remaining text (unparsed) in gray
-    if (startIdx < text.length) {
-      this.drawText(text.slice(startIdx), startIdx, 24, "#6c7086")
+    if (startPos <= text.length) {
+      this.drawText(text.slice(startPos - 1), startPos, 24, "#6c7086")
     }
 
     // Draw cursor
     this.drawCursor(cursorPos, 24)
   }
 
-  // Draw cursor at position
+  // Draw cursor at position (1-indexed column)
   private drawCursor(col: number, row: number): void {
-    if (row < 1 || row > this.rows || col < 0 || col >= this.cols) {
+    if (row < 1 || row > this.rows || col < 1 || col > this.cols) {
       return
     }
 
-    const x = col * this.charWidth
+    // Convert 1-indexed column to 0-indexed offset for pixel calculation
+    const x = (col - 1) * this.charWidth
     const y = row * this.charHeight - 2 // Bottom of cell
 
     this.ctx.fillStyle = this.fgColor
@@ -240,6 +301,25 @@ export class Console {
     document.addEventListener("keydown", (e) => {
       this.handleKeyDown(e)
     })
+  }
+
+  private setupMouseListeners(): void {
+    this.canvas.addEventListener("mousemove", (e) => {
+      this.handleMouseMove(e)
+    })
+  }
+
+  private handleMouseMove(e: MouseEvent): void {
+    // Convert pixel coordinates to cell coordinates
+    // Note: col is 1-indexed (1-80), row is 1-indexed (1-24)
+    const col = Math.floor(e.offsetX / this.charWidth) + 1
+    const row = Math.floor(e.offsetY / this.charHeight) + 1
+
+    this.targetCol = col
+    this.targetRow = row
+
+    // Redraw source to detect idea under cursor
+    this.drawSource()
   }
 
   private handleKeyDown(e: KeyboardEvent): void {
@@ -422,7 +502,8 @@ export class Console {
 
     // Build full command line text with prompt
     const fullText = this.prompt + this.currentLine
-    const cursorCol = this.prompt.length + this.cursorPosition
+    // Convert cursorPosition (0-indexed offset) to 1-indexed column position
+    const cursorCol = this.prompt.length + this.cursorPosition + 1
 
     // Adjust token endIndex to account for prompt
     const adjustedTokens = tokens.map(t => ({

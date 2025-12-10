@@ -23,8 +23,8 @@ of modern, general purpose programming languages.
 12.34                   >> is a Num idea
 12.34 56.78             >> is a List idea of Num ideas
 "I'm a quoted string"   >> is a Str idea
-.                       >> a Bit idea, with an All or True value
-()                      >> a Bit idea, with a Nothing or False value
+.                       >> a Bit idea, with an All or True or Yes value
+()                      >> a Bit idea, with a Nothing or False or No value
 ```
 
 As you can see Barry thinks in ideas. So much so, that we won't state it every
@@ -45,6 +45,23 @@ overstatement to call it _the_ Number idea. Anyway, these are the so called
 _value_ ideas: Bit, Num, Str and List.
 
 List is the only compound value idea in Barry.
+
+## Fifty Shades of Snow
+
+Whitespace is meaningful in Barry, which is kind of relatable knowing that Barry
+lives on seemingly infinite fields of snow covered icesheets. Another argument
+in favor of this is that whitespace is meaningful in every language: a
+sweetheart and a sweet heart have entirely different meanings to Barry.
+
+Luckily meaningful whitespace rules are rather minimal and will be covered
+explicitly when applicable. Be prepared to swallow some meaningful indentation
+rules and some pretty resonable operator overloading where whitespace will
+actually _help_ to maintain recognizability of different but somehow related
+ideas.
+
+The most important meaning of whitespace though is to append elements to a list.
+`1 2 3` is a list of three numbers because of the whitespace between each
+number!
 
 ## A Comment on Comments
 
@@ -1543,18 +1560,47 @@ She is very nice and helps to everybody, until they behave like she wants them
 to. Friction usually occurs when they're not. It's not that's she's angry or
 something, it's more like she knows best how _she_ works. She constantly tries
 to communicate, but everybody is living _inside_ her, and everybody is used to
-communicate with beings from the _outside_.
+communicate with beings _in_ their surrounding and not _with_ it, and it makes
+this usually a bit difficult.
 
 ### Dyllberd
 
 Dyllberd is the husbend of Shebang and they're inseparable. Now, while Shebang
 is uncomprehensibly huge, Dyllberd is uncomprehensibly small. Whyle Shebang is
-composed of everything - at least in that universe -, everything is composed of
-Dyllberd. Barry thinks he kind of understands this, or at least _feels_ it.
-Dyllberd wears silly hats and _always_ in the process of walking out a door.
-This makes it a bit cumbersome to engage in longer conversations with him.
+composed of everything - at least in _that_ universe -, everything is composed
+of Dyllberd. Barry thinks he kind of understands this, or at least _feels_ it.
+Dyllberd wears silly hats and _always_ in the process of walking out on a door,
+which is kind of strange. This makes it a bit cumbersome to engage in longer or
+deeper conversations with him.
 
 ### Nope
+
+Nope always feels lonely and usually a bit moody too, constantly hanging his
+nose, over the sadness of the eternal and unbreakable loneliness. Some even
+suggest that he intentionally try to push this gloom over to others. What's for
+sure, that when sombody is sad, Nope is so quick to show up, that it's hard to
+decide which came first.
+
+Anyway, Nope lives in between things: where there is Dyllberd ther's no Nope.
+They appear always side by side, as they can not overlap. Theaw two old hoods
+are spending a lot of time together talking about presumably interesting topics,
+as Nope is the only one who can be at both side of the door on which Dyllberd is
+stepping out.
+
+Nope is a serious and dedicated hypochondriac, and probably not independently
+from this, he is constantly on some self prescribed medications nobody else ever
+heard of. The friends slowly adapted to his strange behavior, that they mainly
+attribute to the side effects of the snake oils he consumes on a pretty regular
+basis.
+
+### Dagger
+
+Dagger is Barry's husky, not that Barry has a proper understanding of the
+concept of property. Barry interprets this one sided determination as a sign of
+sympathy and likes Daggers company anyway. Dagger helps Barry a lot, as Barry
+isn't very handy with his flippers and Dagger also has a overachiever mentality
+anyway, that Barry lacks completely. Dagger is much more competent in practical
+matters as he can run around and bark at least.
 
 ## Marketing Material
 

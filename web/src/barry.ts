@@ -3,7 +3,7 @@
 
 import { DrawContext } from "./console.js"
 
-// Enum for value kinds that ideas can return
+// Enum for kinds of ideas
 export enum Kind {
   Num = "Num",
   Str = "Str",
@@ -100,13 +100,39 @@ export class Parser {
       }
     }
 
-    // No match found - return unknown idea
+    // No match found - collect consecutive unmatched characters
+    let unknownBuffer = sealString[0] // Start with first character
+    let consumedLength = 1
+
+    // Check remaining characters to see if any form valid seals
+    for (let i = 1; i < sealString.length; i++) {
+      const remaining = sealString.substring(i)
+      // Try to match remaining string from longest to shortest
+      let foundMatch = false
+      for (let len = remaining.length; len > 0; len--) {
+        const candidate = remaining.substring(0, len)
+        if (SealMap.has(candidate)) {
+          foundMatch = true
+          break
+        }
+      }
+      if (foundMatch) {
+        // Stop here - found a valid seal in remaining chars
+        break
+      }
+      // No match, add this char to unknown buffer
+      unknownBuffer += sealString[i]
+      consumedLength++
+    }
+
+    // Create Unknown for all collected unmatched characters
+    this.regex.lastIndex = matchEndPos - sealString.length + consumedLength
     const unknownIdea = new Unknown(
-      sealString[0],
-      `Unknown seal: ${sealString[0]}`,
+      unknownBuffer,
+      `Unknown seal: ${unknownBuffer}`,
     )
     this.tokens.push({
-      endIndex: matchEndPos,
+      endIndex: this.regex.lastIndex,
       idea: unknownIdea,
     })
     return unknownIdea
@@ -222,8 +248,11 @@ export class Parser {
       // prev consumed, use the returned idea
       idea = consumed
 
-      // Remove consumed prev token (second-to-last, current idea is last)
-      this.tokens.splice(this.tokens.length - 2, 1)
+      // Only remove consumed token for Label (which absorbs and recolors it)
+      // Other operators like Add/Mul preserve their arguments' original colors
+      if (idea instanceof Label) {
+        this.tokens.splice(this.tokens.length - 2, 1)
+      }
     }
 
     // Handle Closure - return immediately after look-ahead check
@@ -290,7 +319,7 @@ export abstract class Idea {
   finished: boolean = false
   complete: boolean = false // Ideas are incomplete by default
   error: string | null = null // Error message if idea has a problem
-  abstract valueKind: Kind
+  abstract returnKind: Kind
 
   // Default: ideas don't consume pre (return null)
   consumePre(prev: Idea): Idea | null {
@@ -304,7 +333,7 @@ export abstract class Idea {
 
 // Unknown idea - represents unrecognized input
 export class Unknown extends Idea {
-  valueKind = Kind.Unknown
+  returnKind = Kind.Unknown
   value: string
 
   constructor(value: string, errorMessage: string) {
@@ -323,13 +352,13 @@ export class Unknown extends Idea {
   }
 
   Draw(ctx: DrawContext): void {
-    ctx.write(this.View(), this.Color())
+    ctx.write(this.View(), this.Color(), this)
   }
 }
 
 // Num idea - stores numeric values
 export class Num extends Idea {
-  valueKind = Kind.Num
+  returnKind = Kind.Num
   value: number
 
   constructor(match: string) {
@@ -347,13 +376,13 @@ export class Num extends Idea {
   }
 
   Draw(ctx: DrawContext): void {
-    ctx.write(this.View(), this.Color())
+    ctx.write(this.View(), this.Color(), this)
   }
 }
 
 // Str idea - stores string values
 export class Str extends Idea {
-  valueKind = Kind.Str
+  returnKind = Kind.Str
   value: string
 
   constructor(match: string) {
@@ -371,13 +400,13 @@ export class Str extends Idea {
   }
 
   Draw(ctx: DrawContext): void {
-    ctx.write(this.View(), this.Color())
+    ctx.write(this.View(), this.Color(), this)
   }
 }
 
 // Unquoted idea - stores unquoted string values
 export class Unquoted extends Idea {
-  valueKind = Kind.Unquoted
+  returnKind = Kind.Unquoted
   value: string
 
   constructor(match: string) {
@@ -395,13 +424,13 @@ export class Unquoted extends Idea {
   }
 
   Draw(ctx: DrawContext): void {
-    ctx.write(this.View(), this.Color())
+    ctx.write(this.View(), this.Color(), this)
   }
 }
 
 // Label idea - marks a value with a name (infix colon operator)
 export class Label extends Idea {
-  valueKind = Kind.Label
+  returnKind = Kind.Label
   name: string | null = null
   labeled: Idea | null = null
 
@@ -411,7 +440,7 @@ export class Label extends Idea {
   }
 
   consumePre(prev: Idea): Idea | null {
-    if (prev.valueKind === Kind.Unquoted) {
+    if (prev.returnKind === Kind.Unquoted) {
       this.name = (prev as Unquoted).value
       return this
     }
@@ -437,23 +466,23 @@ export class Label extends Idea {
 
   Draw(ctx: DrawContext): void {
     if (this.name !== null) {
-      ctx.write(this.name + ":", this.Color())
-      ctx.write(" ", this.Color())
+      ctx.write(this.name + ":", this.Color(), this)
+      ctx.write(" ", this.Color(), this)
     } else {
-      ctx.write("_:", this.Color())
-      ctx.write(" ", this.Color())
+      ctx.write("_:", this.Color(), this)
+      ctx.write(" ", this.Color(), this)
     }
     if (this.labeled !== null) {
       this.labeled.Draw(ctx)
     } else {
-      ctx.write("_", this.Color())
+      ctx.write("_", this.Color(), this)
     }
   }
 }
 
 // List idea - contains sequence of ideas
 export class List extends Idea {
-  valueKind = Kind.List
+  returnKind = Kind.List
   items: Idea[] = []
   labelMap: Map<string, Label> = new Map() // name → Label (fast lookup)
   breakpoint: number = -1 // -1: horizontal, 0: break immediately (vertical), >0: break after nth element
@@ -494,7 +523,7 @@ export class List extends Idea {
     const showParens = !ctx.lineStart
 
     if (showParens) {
-      ctx.write("(", this.Color())
+      ctx.write("(", this.Color(), this)
     } else if (this.breakpoint === -1) {
       // Only horizontal lists set lineStart to false when omitting parens
       ctx.lineStart = false
@@ -512,20 +541,20 @@ export class List extends Idea {
       for (let i = 0; i < this.items.length; i++) {
         this.items[i].Draw(ctx)
         if (i < this.items.length - 1) {
-          ctx.write(" ", this.Color())
+          ctx.write(" ", this.Color(), this)
         }
       }
     }
 
     if (showParens) {
-      ctx.write(")", this.Color())
+      ctx.write(")", this.Color(), this)
     }
   }
 }
 
 // Nothing idea - empty expression
 export class Nothing extends Idea {
-  valueKind = Kind.Nothing
+  returnKind = Kind.Nothing
 
   constructor() {
     super()
@@ -541,13 +570,13 @@ export class Nothing extends Idea {
   }
 
   Draw(ctx: DrawContext): void {
-    ctx.write(this.View(), this.Color())
+    ctx.write(this.View(), this.Color(), this)
   }
 }
 
 // Closure idea - closing parenthesis marker (never inserted in AST)
 export class Closure extends Idea {
-  valueKind = Kind.Nothing
+  returnKind = Kind.Nothing
 
   constructor() {
     super()
@@ -568,7 +597,7 @@ export class Closure extends Idea {
 
 // Add idea - addition operator
 export class Add extends Idea {
-  valueKind = Kind.Num
+  returnKind = Kind.Num
   left: Idea | null = null
   right: Idea | null = null
 
@@ -578,7 +607,7 @@ export class Add extends Idea {
   }
 
   consumePre(prev: Idea): Idea | null {
-    if (prev.valueKind === Kind.Num) {
+    if (prev.returnKind === Kind.Num) {
       this.left = prev
       return this
     }
@@ -586,7 +615,7 @@ export class Add extends Idea {
   }
 
   consumePost(next: Idea): boolean {
-    if (next.valueKind === Kind.Num) {
+    if (next.returnKind === Kind.Num) {
       this.right = next
       // Only complete when both left and right are filled
       if (this.left !== null) {
@@ -611,28 +640,28 @@ export class Add extends Idea {
     if (this.left !== null) {
       const needsParens =
         this.left.precedence > 0 && this.left.precedence < this.precedence
-      if (needsParens) ctx.write("(", Color.List)
+      if (needsParens) ctx.write("(", Color.List, this)
       this.left.Draw(ctx)
-      if (needsParens) ctx.write(")", Color.List)
+      if (needsParens) ctx.write(")", Color.List, this)
     } else {
-      ctx.write("_", this.Color())
+      ctx.write("_", this.Color(), this)
     }
-    ctx.write("+", this.Color())
+    ctx.write("+", this.Color(), this)
     if (this.right !== null) {
       const needsParens =
         this.right.precedence > 0 && this.right.precedence < this.precedence
-      if (needsParens) ctx.write("(", Color.List)
+      if (needsParens) ctx.write("(", Color.List, this)
       this.right.Draw(ctx)
-      if (needsParens) ctx.write(")", Color.List)
+      if (needsParens) ctx.write(")", Color.List, this)
     } else {
-      ctx.write("_", this.Color())
+      ctx.write("_", this.Color(), this)
     }
   }
 }
 
 // Mul idea - multiplication operator
 export class Mul extends Idea {
-  valueKind = Kind.Num
+  returnKind = Kind.Num
   left: Idea | null = null
   right: Idea | null = null
 
@@ -642,7 +671,7 @@ export class Mul extends Idea {
   }
 
   consumePre(prev: Idea): Idea | null {
-    if (prev.valueKind === Kind.Num) {
+    if (prev.returnKind === Kind.Num) {
       this.left = prev
       return this
     }
@@ -650,7 +679,7 @@ export class Mul extends Idea {
   }
 
   consumePost(next: Idea): boolean {
-    if (next.valueKind === Kind.Num) {
+    if (next.returnKind === Kind.Num) {
       this.right = next
       // Only complete when both left and right are filled
       if (this.left !== null) {
@@ -675,21 +704,21 @@ export class Mul extends Idea {
     if (this.left !== null) {
       const needsParens =
         this.left.precedence > 0 && this.left.precedence < this.precedence
-      if (needsParens) ctx.write("(", Color.List)
+      if (needsParens) ctx.write("(", Color.List, this)
       this.left.Draw(ctx)
-      if (needsParens) ctx.write(")", Color.List)
+      if (needsParens) ctx.write(")", Color.List, this)
     } else {
-      ctx.write("_", this.Color())
+      ctx.write("_", this.Color(), this)
     }
-    ctx.write("*", this.Color())
+    ctx.write("*", this.Color(), this)
     if (this.right !== null) {
       const needsParens =
         this.right.precedence > 0 && this.right.precedence < this.precedence
-      if (needsParens) ctx.write("(", Color.List)
+      if (needsParens) ctx.write("(", Color.List, this)
       this.right.Draw(ctx)
-      if (needsParens) ctx.write(")", Color.List)
+      if (needsParens) ctx.write(")", Color.List, this)
     } else {
-      ctx.write("_", this.Color())
+      ctx.write("_", this.Color(), this)
     }
   }
 }
