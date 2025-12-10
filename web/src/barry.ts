@@ -520,8 +520,8 @@ export class List extends Idea {
   }
 
   Draw(ctx: DrawContext): void {
-    // Omit parens if at line start (implicit list)
-    const showParens = !ctx.lineStart
+    // Omit parens if at line start (implicit list), unless first item is a label
+    const showParens = !ctx.lineStart || (this.items.length > 0 && this.items[0] instanceof Label)
 
     if (showParens) {
       ctx.write("(", this.Color(), this)

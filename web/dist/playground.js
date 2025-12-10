@@ -390,7 +390,7 @@ var List = class extends Idea {
     return "#5da4f4" /* List */;
   }
   Draw(ctx) {
-    const showParens = !ctx.lineStart;
+    const showParens = !ctx.lineStart || this.items.length > 0 && this.items[0] instanceof Label;
     if (showParens) {
       ctx.write("(", this.Color(), this);
     } else if (this.breakpoint === -1) {
