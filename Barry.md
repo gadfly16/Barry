@@ -2,6 +2,16 @@
 
 ## A programming language that just doesn't work
 
+Barry is a small Lisp like programming language, with some indentation rules to
+reduce eye and brain soar, by reducing the amount of parenthesises needed for
+expressing meaningful structures. It has several unique attributes that mainly
+stem from Barry's unique architecture where the abstract syntax tree is both the
+source of truth _and_ the main product of user interaction. From a practical
+standpoint it means that a correct Barry implementation integrates the compiler,
+the editor and the runtime into one coherent software development experience.
+
+## The Funky Seal
+
 The best thing about the language is its namesake, Barry the funky seal, who is
 pretty lazy, loves fish curry and forestry and looks something like this, when
 dreaming about interesting ideas: (\_\*\_) . That dot can be interpreted either
@@ -17,7 +27,8 @@ interesting ideas of Barry. Let's wet our flippers!
 ```
 
 Yep, I think that's the closest Barry can get to the only mandatory requirement
-of modern, general purpose programming languages.
+of modern, general purpose programming languages, as Barry doesn't know how to
+print and he also doesn't really care.
 
 ```
 12.34                   >> is a Num idea
@@ -1546,6 +1557,10 @@ happens to live on another planet. On that planet cows live casually forever. It
 needless to say that mU is also pretty lazy. She's actually the same being, like
 another cap of the same fungi living under the roots of the same forest.
 
+mU is a bit older than Barry, which doesn't make a lot of difference between
+eternal being, yet this fact kind of sets the tone of imagination when they're
+thinking about each other.
+
 ### Welv
 
 Welv is an arctic fox. If you ask her she will tell, she's interested in
@@ -1601,6 +1616,28 @@ sympathy and likes Daggers company anyway. Dagger helps Barry a lot, as Barry
 isn't very handy with his flippers and Dagger also has a overachiever mentality
 anyway, that Barry lacks completely. Dagger is much more competent in practical
 matters as he can run around and bark at least.
+
+We don't really know what Dagger eats, as he is quiet private about this, as a
+matter of fact nobody have seen him eating. Sometimes he wonders behind the snow
+dunes down the continent and when he comes back there's usually red spots on
+him, mainly around his moth. He says its _jam_, but Barry has some reservations
+about this, as almos every other day Dagger can spin himself into self induced
+agitated monologues about how he _despises_ jam. Luckily there are an infinite
+number of _other_ ways Barry can look.
+
+Dagger looks something like this when inspecting something: ^..^ and like this
+when some jam gets into his mouth or jammed in other words: ^oO^ and as he gets
+tired of working his mood progressively deteroriates from Ok to passed out
+through the phases of ^++^, ^\*\*^ to ^xX^. When they are laughing together with
+Barry he looks like this: vv^v as he is lying on his back and his tongue is
+hanging out.
+
+### Bianca
+
+Bianca is one particular snowflake. She is small, entirely unique and very hard
+to find because she is white, small and there is snow and ice all around. But
+the firends know that she's out there _somewhere_ on the continent, minding her
+own business. They can just feel it, deep down their sweet little hearts.
 
 ## Marketing Material
 

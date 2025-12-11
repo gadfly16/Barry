@@ -3,7 +3,7 @@
 // Line 23: Status line
 // Line 24: Command line
 
-import { Parser, LineView, Idea, List, Num, Str, Unquoted, Label } from "./barry.js"
+import { Parser, LineView, Idea, List } from "./barry.js"
 
 export interface TokenInfo {
   endIndex: number // End position in text
@@ -24,16 +24,16 @@ export class DrawContext {
   // Idea under cursor (set during draw if coordinates match)
   ideaUnderCursor: Idea | null = null
 
-  constructor(console: Console, targetCol: number, targetRow: number) {
+  constructor(console: Console, targetCol: number = 0, targetRow: number = 0) {
     this.console = console
     this.targetCol = targetCol
     this.targetRow = targetRow
   }
 
   // Write text at current position and advance cursor
-  write(text: string, color: string, idea: Idea): void {
+  write(text: string, color: string, idea: Idea | null = null): void {
     // Check if we're drawing at the target coordinates
-    if (this.targetRow === this.row) {
+    if (idea !== null && this.targetRow === this.row) {
       // Check if target column falls within this text span
       const startCol = this.col
       const endCol = this.col + text.length - 1
@@ -206,37 +206,14 @@ export class Console {
 
     // Display info about idea under cursor
     if (ctx.ideaUnderCursor !== null) {
-      const idea = ctx.ideaUnderCursor
-      let status = `Kind: ${idea.constructor.name}`
-
-      // Add value if present
-      const value = this.getIdeaValue(idea)
-      if (value !== null) {
-        status += `  Value: ${value}`
-      }
-
-      // Add error if present
-      if (idea.error !== null) {
-        status += `  Error: ${idea.error}`
-      }
-
-      this.drawStatus(status)
+      this.clearStatus()
+      const statusCtx = new DrawContext(this)
+      statusCtx.row = 23 // Status line
+      statusCtx.col = 1
+      ctx.ideaUnderCursor.Info(statusCtx)
     }
   }
 
-  // Get displayable value from an idea (null if no value to display)
-  private getIdeaValue(idea: Idea): string | null {
-    if (idea instanceof Num) {
-      return idea.value.toString()
-    } else if (idea instanceof Str) {
-      return `"${idea.value}"`
-    } else if (idea instanceof Unquoted) {
-      return idea.value
-    } else if (idea instanceof Label && idea.name !== null) {
-      return idea.name
-    }
-    return null
-  }
 
   // Draw command line with token-based coloring
   drawCommandLine(text: string, tokens: TokenInfo[], cursorPos: number): void {

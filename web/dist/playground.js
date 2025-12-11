@@ -6,8 +6,10 @@ var Kind = /* @__PURE__ */ ((Kind2) => {
   Kind2["Label"] = "Label";
   Kind2["List"] = "List";
   Kind2["Nothing"] = "Bit";
-  Kind2["Unknown"] = "Unknown";
   Kind2["Operator"] = "Operator";
+  Kind2["Add"] = "Add";
+  Kind2["Mul"] = "Mul";
+  Kind2["Blank"] = "Blank";
   return Kind2;
 })(Kind || {});
 var Color = /* @__PURE__ */ ((Color2) => {
@@ -15,9 +17,10 @@ var Color = /* @__PURE__ */ ((Color2) => {
   Color2["String"] = "#ffb0b0";
   Color2["Unquoted"] = "#eed49f";
   Color2["Label"] = "#44BBEE";
-  Color2["List"] = "#5da4f4";
-  Color2["Operator"] = "#c680f6";
+  Color2["List"] = "#EE8888";
+  Color2["Operator"] = "#CC88EE";
   Color2["Error"] = "#FF4422";
+  Color2["Default"] = "#444444";
   return Color2;
 })(Color || {});
 var TOKEN_PATTERN = /(?:"(?<quoted>[^"]*)"|(?<list>\()|(?<closure>\))|(?<number>-?\d+\.?\d*)|(?<seal>[^\w\s"()]+)|(?<unquoted>[^:\s]+)|(?<append>\s+))/g;
@@ -94,15 +97,12 @@ var Parser = class {
       consumedLength++;
     }
     this.regex.lastIndex = matchEndPos - sealString.length + consumedLength;
-    const unknownIdea = new Unknown(
-      unknownBuffer,
-      `Unknown seal: ${unknownBuffer}`
-    );
+    const unquotedIdea = new Unquoted(unknownBuffer);
     this.tokens.push({
       endIndex: this.regex.lastIndex,
-      idea: unknownIdea
+      idea: unquotedIdea
     });
-    return unknownIdea;
+    return unquotedIdea;
   }
   // Entry point for parsing - handles root list with special processing
   start(input) {
@@ -172,20 +172,24 @@ var Parser = class {
         idea
       });
     }
-    console.log("Created idea:", idea instanceof Closure ? ")" : idea.View());
     if (prev !== null) {
       if (idea.precedence < suitor) {
         rewind();
         return null;
       }
-      const consumed = idea.consumePre(prev);
-      if (consumed === null) {
+      if (idea instanceof Op) {
+        const consumed = idea.consumePre(prev);
+        if (consumed === null) {
+          rewind();
+          return null;
+        }
+        idea = consumed;
+        if (idea instanceof Label) {
+          this.tokens.splice(this.tokens.length - 2, 1);
+        }
+      } else {
         rewind();
         return null;
-      }
-      idea = consumed;
-      if (idea instanceof Label) {
-        this.tokens.splice(this.tokens.length - 2, 1);
       }
     }
     if (idea instanceof Closure) {
@@ -233,90 +237,91 @@ var Parser = class {
 };
 var Idea = class {
   precedence = 0;
-  finished = false;
-  complete = false;
-  // Ideas are incomplete by default
   error = null;
-  // Default: ideas don't consume pre (return null)
+  baseColor = "#444444" /* Default */;
+  Color() {
+    if (this.error !== null) return "#FF4422" /* Error */;
+    return this.baseColor;
+  }
+  Info(ctx) {
+    ctx.write(this.kind, this.baseColor);
+    if (this.error !== null) {
+      ctx.write(" ", this.baseColor);
+      ctx.write(this.error, "#FF4422" /* Error */);
+    }
+    const result = this.Eval();
+    ctx.write(" => ", this.baseColor);
+    ctx.write(result.View(), result.Color());
+  }
+  Eval() {
+    return new Blank();
+  }
+};
+var Op = class extends Idea {
+  complete = false;
+  // Operators track completion
   consumePre(prev) {
     return null;
   }
 };
-var Unknown = class extends Idea {
-  returnKind = "Unknown" /* Unknown */;
-  value;
-  constructor(value, errorMessage) {
-    super();
-    this.value = value;
-    this.error = errorMessage;
-    this.complete = true;
-  }
-  View() {
-    return this.value;
-  }
-  Color() {
-    return "#FF4422" /* Error */;
-  }
-  Draw(ctx) {
-    ctx.write(this.View(), this.Color(), this);
+var Value = class extends Idea {
+  // Values are always complete, no tracking needed
+  Eval() {
+    return this;
   }
 };
-var Num = class extends Idea {
+var Num = class extends Value {
+  kind = "Num" /* Num */;
   returnKind = "Num" /* Num */;
+  baseColor = "#a6da95" /* Number */;
   value;
   constructor(match) {
     super();
-    this.value = parseFloat(match);
-    this.complete = true;
+    this.value = typeof match === "string" ? parseFloat(match) : match;
   }
   View() {
     return this.value.toString();
   }
-  Color() {
-    return "#a6da95" /* Number */;
-  }
   Draw(ctx) {
     ctx.write(this.View(), this.Color(), this);
   }
 };
-var Str = class extends Idea {
+var Str = class extends Value {
+  kind = "Str" /* Str */;
   returnKind = "Str" /* Str */;
+  baseColor = "#ffb0b0" /* String */;
   value;
   constructor(match) {
     super();
     this.value = match;
-    this.complete = true;
   }
   View() {
     return '"' + this.value + '"';
   }
-  Color() {
-    return "#ffb0b0" /* String */;
-  }
   Draw(ctx) {
     ctx.write(this.View(), this.Color(), this);
   }
 };
-var Unquoted = class extends Idea {
+var Unquoted = class extends Value {
+  kind = "Unquoted" /* Unquoted */;
   returnKind = "Unquoted" /* Unquoted */;
+  baseColor = "#eed49f" /* Unquoted */;
   value;
   constructor(match) {
     super();
     this.value = match;
-    this.complete = true;
   }
   View() {
     return this.value;
-  }
-  Color() {
-    return "#eed49f" /* Unquoted */;
   }
   Draw(ctx) {
     ctx.write(this.View(), this.Color(), this);
   }
 };
-var Label = class extends Idea {
+var Label = class extends Op {
+  kind = "Label" /* Label */;
   returnKind = "Label" /* Label */;
+  baseColor = "#44BBEE" /* Label */;
   name = null;
   labeled = null;
   constructor() {
@@ -340,10 +345,6 @@ var Label = class extends Idea {
     const labeledStr = this.labeled ? this.labeled.View() : "_";
     return nameStr + ":" + labeledStr;
   }
-  Color() {
-    if (this.error !== null) return "#FF4422" /* Error */;
-    return "#44BBEE" /* Label */;
-  }
   Draw(ctx) {
     if (this.name !== null) {
       ctx.write(this.name + ":", this.Color(), this);
@@ -359,8 +360,10 @@ var Label = class extends Idea {
     }
   }
 };
-var List = class extends Idea {
+var List = class _List extends Value {
+  kind = "List" /* List */;
   returnKind = "List" /* List */;
+  baseColor = "#EE8888" /* List */;
   items = [];
   labelMap = /* @__PURE__ */ new Map();
   // name → Label (fast lookup)
@@ -368,13 +371,12 @@ var List = class extends Idea {
   // -1: horizontal, 0: break immediately (vertical), >0: break after nth element
   constructor() {
     super();
-    this.complete = true;
   }
   append(idea) {
     this.items.push(idea);
     if (idea instanceof Label && idea.name !== null) {
       if (this.labelMap.has(idea.name)) {
-        idea.error = `Duplicate label: ${idea.name}`;
+        idea.error = `duplicate label`;
       } else {
         this.labelMap.set(idea.name, idea);
       }
@@ -386,11 +388,15 @@ var List = class extends Idea {
   LineView() {
     return this.items.map((item) => item.View()).join(" ");
   }
-  Color() {
-    return "#5da4f4" /* List */;
+  Eval() {
+    const result = new _List();
+    for (const item of this.items) {
+      result.append(item.Eval());
+    }
+    return result;
   }
   Draw(ctx) {
-    const showParens = !ctx.lineStart || this.items.length > 0 && this.items[0] instanceof Label;
+    const showParens = !ctx.lineStart || this.breakpoint !== 0 && this.items.length > 0 && this.items[0] instanceof Label;
     if (showParens) {
       ctx.write("(", this.Color(), this);
     } else if (this.breakpoint === -1) {
@@ -415,39 +421,44 @@ var List = class extends Idea {
     }
   }
 };
-var Nothing = class extends Idea {
+var Nothing = class extends Value {
+  kind = "Bit" /* Nothing */;
   returnKind = "Bit" /* Nothing */;
+  baseColor = "#EE8888" /* List */;
   constructor() {
     super();
-    this.complete = true;
   }
   View() {
     return "()";
-  }
-  Color() {
-    return "#5da4f4" /* List */;
   }
   Draw(ctx) {
     ctx.write(this.View(), this.Color(), this);
   }
 };
 var Closure = class extends Idea {
+  kind = "Bit" /* Nothing */;
   returnKind = "Bit" /* Nothing */;
-  constructor() {
-    super();
-  }
   View() {
     throw new Error("Closure should never appear in AST");
-  }
-  Color() {
-    return "#FF4422" /* Error */;
   }
   Draw(ctx) {
     throw new Error("Closure should never appear in AST");
   }
 };
-var Add = class extends Idea {
+var Blank = class extends Idea {
+  kind = "Blank" /* Blank */;
+  returnKind = "Blank" /* Blank */;
+  View() {
+    return "_";
+  }
+  Draw(ctx) {
+    ctx.write("_", this.Color(), this);
+  }
+};
+var Add = class extends Op {
+  kind = "Add" /* Add */;
   returnKind = "Operator" /* Operator */;
+  baseColor = "#CC88EE" /* Operator */;
   left = null;
   right = null;
   constructor() {
@@ -477,31 +488,41 @@ var Add = class extends Idea {
     const rightArg = this.right === null ? "_" : this.right.View();
     return leftArg + "+" + rightArg;
   }
-  Color() {
-    return "#c680f6" /* Operator */;
+  Eval() {
+    if (this.left === null || this.right === null) {
+      return new Blank();
+    }
+    const leftResult = this.left.Eval();
+    const rightResult = this.right.Eval();
+    if (leftResult instanceof Num && rightResult instanceof Num) {
+      return new Num(leftResult.value + rightResult.value);
+    }
+    return new Blank();
   }
   Draw(ctx) {
     if (this.left !== null) {
       const needsParens = this.left.precedence > 0 && this.left.precedence < this.precedence;
-      if (needsParens) ctx.write("(", "#5da4f4" /* List */, this);
+      if (needsParens) ctx.write("(", "#EE8888" /* List */, this);
       this.left.Draw(ctx);
-      if (needsParens) ctx.write(")", "#5da4f4" /* List */, this);
+      if (needsParens) ctx.write(")", "#EE8888" /* List */, this);
     } else {
       ctx.write("_", this.Color(), this);
     }
     ctx.write("+", this.Color(), this);
     if (this.right !== null) {
       const needsParens = this.right.precedence > 0 && this.right.precedence < this.precedence;
-      if (needsParens) ctx.write("(", "#5da4f4" /* List */, this);
+      if (needsParens) ctx.write("(", "#EE8888" /* List */, this);
       this.right.Draw(ctx);
-      if (needsParens) ctx.write(")", "#5da4f4" /* List */, this);
+      if (needsParens) ctx.write(")", "#EE8888" /* List */, this);
     } else {
       ctx.write("_", this.Color(), this);
     }
   }
 };
-var Mul = class extends Idea {
+var Mul = class extends Op {
+  kind = "Mul" /* Mul */;
   returnKind = "Operator" /* Operator */;
+  baseColor = "#CC88EE" /* Operator */;
   left = null;
   right = null;
   constructor() {
@@ -531,24 +552,32 @@ var Mul = class extends Idea {
     const rightArg = this.right === null ? "_" : this.right.View();
     return leftArg + "*" + rightArg;
   }
-  Color() {
-    return "#c680f6" /* Operator */;
+  Eval() {
+    if (this.left === null || this.right === null) {
+      return new Blank();
+    }
+    const leftResult = this.left.Eval();
+    const rightResult = this.right.Eval();
+    if (leftResult instanceof Num && rightResult instanceof Num) {
+      return new Num(leftResult.value * rightResult.value);
+    }
+    return new Blank();
   }
   Draw(ctx) {
     if (this.left !== null) {
       const needsParens = this.left.precedence > 0 && this.left.precedence < this.precedence;
-      if (needsParens) ctx.write("(", "#5da4f4" /* List */, this);
+      if (needsParens) ctx.write("(", "#EE8888" /* List */, this);
       this.left.Draw(ctx);
-      if (needsParens) ctx.write(")", "#5da4f4" /* List */, this);
+      if (needsParens) ctx.write(")", "#EE8888" /* List */, this);
     } else {
       ctx.write("_", this.Color(), this);
     }
     ctx.write("*", this.Color(), this);
     if (this.right !== null) {
       const needsParens = this.right.precedence > 0 && this.right.precedence < this.precedence;
-      if (needsParens) ctx.write("(", "#5da4f4" /* List */, this);
+      if (needsParens) ctx.write("(", "#EE8888" /* List */, this);
       this.right.Draw(ctx);
-      if (needsParens) ctx.write(")", "#5da4f4" /* List */, this);
+      if (needsParens) ctx.write(")", "#EE8888" /* List */, this);
     } else {
       ctx.write("_", this.Color(), this);
     }
@@ -566,14 +595,14 @@ var DrawContext2 = class {
   targetRow = -1;
   // Idea under cursor (set during draw if coordinates match)
   ideaUnderCursor = null;
-  constructor(console2, targetCol, targetRow) {
+  constructor(console2, targetCol = 0, targetRow = 0) {
     this.console = console2;
     this.targetCol = targetCol;
     this.targetRow = targetRow;
   }
   // Write text at current position and advance cursor
-  write(text, color, idea) {
-    if (this.targetRow === this.row) {
+  write(text, color, idea = null) {
+    if (idea !== null && this.targetRow === this.row) {
       const startCol = this.col;
       const endCol = this.col + text.length - 1;
       if (this.targetCol >= startCol && this.targetCol <= endCol) {
@@ -708,30 +737,12 @@ var Console = class {
     const ctx = new DrawContext2(this, this.targetCol, this.targetRow);
     this.source.Draw(ctx);
     if (ctx.ideaUnderCursor !== null) {
-      const idea = ctx.ideaUnderCursor;
-      let status = `Kind: ${idea.constructor.name}`;
-      const value = this.getIdeaValue(idea);
-      if (value !== null) {
-        status += `  Value: ${value}`;
-      }
-      if (idea.error !== null) {
-        status += `  Error: ${idea.error}`;
-      }
-      this.drawStatus(status);
+      this.clearStatus();
+      const statusCtx = new DrawContext2(this);
+      statusCtx.row = 23;
+      statusCtx.col = 1;
+      ctx.ideaUnderCursor.Info(statusCtx);
     }
-  }
-  // Get displayable value from an idea (null if no value to display)
-  getIdeaValue(idea) {
-    if (idea instanceof Num) {
-      return idea.value.toString();
-    } else if (idea instanceof Str) {
-      return `"${idea.value}"`;
-    } else if (idea instanceof Unquoted) {
-      return idea.value;
-    } else if (idea instanceof Label && idea.name !== null) {
-      return idea.name;
-    }
-    return null;
   }
   // Draw command line with token-based coloring
   drawCommandLine(text, tokens, cursorPos) {

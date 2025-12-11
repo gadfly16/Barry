@@ -11,8 +11,10 @@ export enum Kind {
   Label = "Label",
   List = "List",
   Nothing = "Bit",
-  Unknown = "Unknown",
   Operator = "Operator",
+  Add = "Add",
+  Mul = "Mul",
+  Blank = "Blank",
 }
 
 // Enum for syntax colors
@@ -21,9 +23,10 @@ export enum Color {
   String = "#ffb0b0",
   Unquoted = "#eed49f",
   Label = "#44BBEE",
-  List = "#5da4f4",
-  Operator = "#c680f6",
+  List = "#EE8888",
+  Operator = "#CC88EE",
   Error = "#FF4422",
+  Default = "#444444", // Dark gray default
 }
 
 // Combined regex pattern for token matching with global flag
@@ -126,17 +129,14 @@ export class Parser {
       consumedLength++
     }
 
-    // Create Unknown for all collected unmatched characters
+    // Create Unquoted for all collected unmatched characters
     this.regex.lastIndex = matchEndPos - sealString.length + consumedLength
-    const unknownIdea = new Unknown(
-      unknownBuffer,
-      `Unknown seal: ${unknownBuffer}`,
-    )
+    const unquotedIdea = new Unquoted(unknownBuffer)
     this.tokens.push({
       endIndex: this.regex.lastIndex,
-      idea: unknownIdea,
+      idea: unquotedIdea,
     })
-    return unknownIdea
+    return unquotedIdea
   }
 
   // Entry point for parsing - handles root list with special processing
@@ -231,8 +231,6 @@ export class Parser {
       })
     }
 
-    console.log("Created idea:", idea instanceof Closure ? ")" : idea.View())
-
     // Look-ahead check: if prev is provided, try to consume it
     if (prev !== null) {
       // Check precedence: only consume if our precedence is >= suitor
@@ -240,19 +238,26 @@ export class Parser {
         rewind()
         return null
       }
-      const consumed = idea.consumePre(prev)
-      if (consumed === null) {
-        // prev not consumed, return null
+      // Only operators can consume previous ideas
+      if (idea instanceof Op) {
+        const consumed = idea.consumePre(prev)
+        if (consumed === null) {
+          // prev not consumed, return null
+          rewind()
+          return null
+        }
+        // prev consumed, use the returned idea
+        idea = consumed
+
+        // Only remove consumed token for Label (which absorbs and recolors it)
+        // Other operators like Add/Mul preserve their arguments' original colors
+        if (idea instanceof Label) {
+          this.tokens.splice(this.tokens.length - 2, 1)
+        }
+      } else {
+        // Not an operator, can't consume prev
         rewind()
         return null
-      }
-      // prev consumed, use the returned idea
-      idea = consumed
-
-      // Only remove consumed token for Label (which absorbs and recolors it)
-      // Other operators like Add/Mul preserve their arguments' original colors
-      if (idea instanceof Label) {
-        this.tokens.splice(this.tokens.length - 2, 1)
       }
     }
 
@@ -317,63 +322,68 @@ export class Parser {
 // Base class for all ideas (AST nodes)
 export abstract class Idea {
   precedence: number = 0
-  finished: boolean = false
-  complete: boolean = false // Ideas are incomplete by default
-  error: string | null = null // Error message if idea has a problem
+  error: string | null = null
+  baseColor: Color = Color.Default
+  abstract kind: Kind
   abstract returnKind: Kind
 
-  // Default: ideas don't consume pre (return null)
+  abstract View(): string
+  abstract Draw(ctx: DrawContext): void
+
+  Color(): Color {
+    if (this.error !== null) return Color.Error
+    return this.baseColor
+  }
+
+  Info(ctx: DrawContext): void {
+    ctx.write(this.kind, this.baseColor)
+    if (this.error !== null) {
+      ctx.write(" ", this.baseColor)
+      ctx.write(this.error, Color.Error)
+    }
+
+    const result = this.Eval()
+    ctx.write(" => ", this.baseColor)
+    ctx.write(result.View(), result.Color())
+  }
+
+  Eval(): Idea {
+    return new Blank()
+  }
+}
+
+// Op - base class for operators
+export abstract class Op extends Idea {
+  complete: boolean = false // Operators track completion
+
   consumePre(prev: Idea): Idea | null {
     return null
   }
-
-  abstract View(): string
-  abstract Color(): Color
-  abstract Draw(ctx: DrawContext): void
 }
 
-// Unknown idea - represents unrecognized input
-export class Unknown extends Idea {
-  returnKind = Kind.Unknown
-  value: string
+// Value - base class for value ideas
+export abstract class Value extends Idea {
+  // Values are always complete, no tracking needed
 
-  constructor(value: string, errorMessage: string) {
-    super()
-    this.value = value
-    this.error = errorMessage
-    this.complete = true // Unknown doesn't need arguments
-  }
-
-  View(): string {
-    return this.value
-  }
-
-  Color(): Color {
-    return Color.Error
-  }
-
-  Draw(ctx: DrawContext): void {
-    ctx.write(this.View(), this.Color(), this)
+  Eval(): Idea {
+    return this // Values evaluate to themselves
   }
 }
 
 // Num idea - stores numeric values
-export class Num extends Idea {
+export class Num extends Value {
+  kind = Kind.Num
   returnKind = Kind.Num
+  baseColor = Color.Number
   value: number
 
-  constructor(match: string) {
+  constructor(match: string | number) {
     super()
-    this.value = parseFloat(match)
-    this.complete = true
+    this.value = typeof match === "string" ? parseFloat(match) : match
   }
 
   View(): string {
     return this.value.toString()
-  }
-
-  Color(): Color {
-    return Color.Number
   }
 
   Draw(ctx: DrawContext): void {
@@ -382,22 +392,19 @@ export class Num extends Idea {
 }
 
 // Str idea - stores string values
-export class Str extends Idea {
+export class Str extends Value {
+  kind = Kind.Str
   returnKind = Kind.Str
+  baseColor = Color.String
   value: string
 
   constructor(match: string) {
     super()
     this.value = match
-    this.complete = true
   }
 
   View(): string {
     return '"' + this.value + '"'
-  }
-
-  Color(): Color {
-    return Color.String
   }
 
   Draw(ctx: DrawContext): void {
@@ -406,22 +413,19 @@ export class Str extends Idea {
 }
 
 // Unquoted idea - stores unquoted string values
-export class Unquoted extends Idea {
+export class Unquoted extends Value {
+  kind = Kind.Unquoted
   returnKind = Kind.Unquoted
+  baseColor = Color.Unquoted
   value: string
 
   constructor(match: string) {
     super()
     this.value = match
-    this.complete = true
   }
 
   View(): string {
     return this.value
-  }
-
-  Color(): Color {
-    return Color.Unquoted
   }
 
   Draw(ctx: DrawContext): void {
@@ -430,8 +434,10 @@ export class Unquoted extends Idea {
 }
 
 // Label idea - marks a value with a name (infix colon operator)
-export class Label extends Idea {
+export class Label extends Op {
+  kind = Kind.Label
   returnKind = Kind.Label
+  baseColor = Color.Label
   name: string | null = null
   labeled: Idea | null = null
 
@@ -460,11 +466,6 @@ export class Label extends Idea {
     return nameStr + ":" + labeledStr
   }
 
-  Color(): Color {
-    if (this.error !== null) return Color.Error
-    return Color.Label
-  }
-
   Draw(ctx: DrawContext): void {
     if (this.name !== null) {
       ctx.write(this.name + ":", this.Color(), this)
@@ -482,15 +483,16 @@ export class Label extends Idea {
 }
 
 // List idea - contains sequence of ideas
-export class List extends Idea {
+export class List extends Value {
+  kind = Kind.List
   returnKind = Kind.List
+  baseColor = Color.List
   items: Idea[] = []
   labelMap: Map<string, Label> = new Map() // name → Label (fast lookup)
   breakpoint: number = -1 // -1: horizontal, 0: break immediately (vertical), >0: break after nth element
 
   constructor() {
     super()
-    this.complete = true
   }
 
   append(idea: Idea) {
@@ -500,7 +502,7 @@ export class List extends Idea {
     if (idea instanceof Label && idea.name !== null) {
       // Check for duplicate labels
       if (this.labelMap.has(idea.name)) {
-        idea.error = `Duplicate label: ${idea.name}`
+        idea.error = `duplicate label`
       } else {
         this.labelMap.set(idea.name, idea)
       }
@@ -515,13 +517,21 @@ export class List extends Idea {
     return this.items.map((item) => item.View()).join(" ")
   }
 
-  Color(): Color {
-    return Color.List
+  Eval(): Idea {
+    const result = new List()
+    for (const item of this.items) {
+      result.append(item.Eval())
+    }
+    return result
   }
 
   Draw(ctx: DrawContext): void {
-    // Omit parens if at line start (implicit list), unless first item is a label
-    const showParens = !ctx.lineStart || (this.items.length > 0 && this.items[0] instanceof Label)
+    // Omit parens if at line start (implicit list), unless horizontal list starts with label
+    const showParens =
+      !ctx.lineStart ||
+      (this.breakpoint !== 0 &&
+        this.items.length > 0 &&
+        this.items[0] instanceof Label)
 
     if (showParens) {
       ctx.write("(", this.Color(), this)
@@ -554,20 +564,17 @@ export class List extends Idea {
 }
 
 // Nothing idea - empty expression
-export class Nothing extends Idea {
+export class Nothing extends Value {
+  kind = Kind.Nothing
   returnKind = Kind.Nothing
+  baseColor = Color.List
 
   constructor() {
     super()
-    this.complete = true
   }
 
   View(): string {
     return "()"
-  }
-
-  Color(): Color {
-    return Color.List
   }
 
   Draw(ctx: DrawContext): void {
@@ -577,18 +584,11 @@ export class Nothing extends Idea {
 
 // Closure idea - closing parenthesis marker (never inserted in AST)
 export class Closure extends Idea {
+  kind = Kind.Nothing
   returnKind = Kind.Nothing
-
-  constructor() {
-    super()
-  }
 
   View(): string {
     throw new Error("Closure should never appear in AST")
-  }
-
-  Color(): Color {
-    return Color.Error // Should never be visible
   }
 
   Draw(ctx: DrawContext): void {
@@ -596,9 +596,25 @@ export class Closure extends Idea {
   }
 }
 
+// Blank idea - represents missing/undefined values (marker, not a real node)
+export class Blank extends Idea {
+  kind = Kind.Blank
+  returnKind = Kind.Blank
+
+  View(): string {
+    return "_"
+  }
+
+  Draw(ctx: DrawContext): void {
+    ctx.write("_", this.Color(), this)
+  }
+}
+
 // Add idea - addition operator
-export class Add extends Idea {
+export class Add extends Op {
+  kind = Kind.Add
   returnKind = Kind.Operator
+  baseColor = Color.Operator
   left: Idea | null = null
   right: Idea | null = null
 
@@ -634,8 +650,17 @@ export class Add extends Idea {
     return leftArg + "+" + rightArg
   }
 
-  Color(): Color {
-    return Color.Operator
+  Eval(): Idea {
+    if (this.left === null || this.right === null) {
+      return new Blank()
+    }
+    const leftResult = this.left.Eval()
+    const rightResult = this.right.Eval()
+
+    if (leftResult instanceof Num && rightResult instanceof Num) {
+      return new Num(leftResult.value + rightResult.value)
+    }
+    return new Blank()
   }
 
   Draw(ctx: DrawContext): void {
@@ -662,8 +687,10 @@ export class Add extends Idea {
 }
 
 // Mul idea - multiplication operator
-export class Mul extends Idea {
+export class Mul extends Op {
+  kind = Kind.Mul
   returnKind = Kind.Operator
+  baseColor = Color.Operator
   left: Idea | null = null
   right: Idea | null = null
 
@@ -699,8 +726,17 @@ export class Mul extends Idea {
     return leftArg + "*" + rightArg
   }
 
-  Color(): Color {
-    return Color.Operator
+  Eval(): Idea {
+    if (this.left === null || this.right === null) {
+      return new Blank()
+    }
+    const leftResult = this.left.Eval()
+    const rightResult = this.right.Eval()
+
+    if (leftResult instanceof Num && rightResult instanceof Num) {
+      return new Num(leftResult.value * rightResult.value)
+    }
+    return new Blank()
   }
 
   Draw(ctx: DrawContext): void {
