@@ -3,19 +3,20 @@
 ## A programming language that just doesn't work
 
 Barry is a small Lisp like programming language, with some indentation rules to
-reduce eye and brain soar, by reducing the amount of parenthesises needed for
-expressing meaningful structures. It has several unique attributes that mainly
-stem from Barry's unique architecture where the abstract syntax tree is both the
-source of truth _and_ the main product of user interaction. From a practical
-standpoint it means that a correct Barry implementation integrates the compiler,
-the editor and the runtime into one coherent software development experience.
+reduce eye soar and brain damage, by reducing the amount of parenthesises needed
+for expressing meaningful structures. It has several unique attributes that
+mainly stem from Barry's unique architecture where the abstract syntax tree is
+both the source of truth _and_ the main product of user interaction. From a
+practical standpoint it means that a correct Barry implementation integrates the
+compiler, the editor and the runtime into one coherent software development
+experience.
 
 ## The Funky Seal
 
-The best thing about the language is its namesake, Barry the funky seal, who is
-pretty lazy, loves fish curry and forestry and looks something like this, when
+The best thing about the language is its namesake, Barry the Funky Seal, who is
+rather lazy, loves fish curry and forestry and looks something like this, when
 dreaming about interesting ideas: (\_\*\_) . That dot can be interpreted either
-as a punctuation mark or as the entire existence lying next to Barry.
+as a punctuation mark or as the entire universe lying next to Barry.
 
 ## Your First Time with Barry
 

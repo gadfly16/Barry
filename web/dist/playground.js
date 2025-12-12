@@ -649,12 +649,16 @@ var DrawContext2 = class {
   }
   // Check if position is within source bounds (rows 1-22)
   inSourceBounds() {
-    return this.row >= 1 && this.row <= 22;
+    return this.row >= this.console.sourceStart && this.row <= this.console.sourceEnd;
   }
 };
 var Console = class {
-  cols = 80;
-  rows = 24;
+  width = 100;
+  height = 30;
+  sourceStart = 1;
+  sourceEnd = this.height - 2;
+  statusLine = this.height - 1;
+  cmdLine = this.height;
   fontSize;
   fontFamily = "JetBrains Mono";
   // Measured character metrics
@@ -675,7 +679,7 @@ var Console = class {
   // Source - vertical implicit list of lines
   source;
   // Command line input state
-  prompt = "(_*_) ";
+  prompt = "^..^ ";
   currentLine = "";
   cursorPosition = 0;
   history = [];
@@ -707,8 +711,8 @@ var Console = class {
     const metrics = this.ctx.measureText("M");
     this.charWidth = metrics.width;
     this.charHeight = Math.ceil(this.fontSize * 1.5);
-    this.canvas.width = this.cols * this.charWidth;
-    this.canvas.height = this.rows * this.charHeight;
+    this.canvas.width = this.width * this.charWidth;
+    this.canvas.height = this.height * this.charHeight;
     this.ctx.font = `${this.fontSize}px ${this.fontFamily}`;
     this.ctx.textBaseline = "middle";
     this.ctx.textAlign = "left";
@@ -723,26 +727,26 @@ var Console = class {
   clearSource() {
     this.ctx.fillStyle = this.bgColor;
     const y = 0;
-    const height = 22 * this.charHeight;
+    const height = this.sourceEnd * this.charHeight;
     this.ctx.fillRect(0, y, this.canvas.width, height);
   }
-  // Clear status line (line 23)
+  // Clear status line
   clearStatus() {
     this.ctx.fillStyle = this.statusBg;
-    const y = 22 * this.charHeight;
+    const y = (this.statusLine - 1) * this.charHeight;
     const height = this.charHeight;
     this.ctx.fillRect(0, y, this.canvas.width, height);
   }
   // Clear command line (line 24)
   clearCommand() {
     this.ctx.fillStyle = this.bgColor;
-    const y = 23 * this.charHeight;
+    const y = (this.cmdLine - 1) * this.charHeight;
     const height = this.charHeight;
     this.ctx.fillRect(0, y, this.canvas.width, height);
   }
-  // Draw text starting at console coordinates (col: 1-80, row: 1-24)
+  // Draw text starting at console coordinates
   drawText(text, col, row, color) {
-    if (row < 1 || row > this.rows || col < 1 || col > this.cols) {
+    if (row < 1 || row > this.height || col < 1 || col > this.width) {
       return;
     }
     const x = (col - 1) * this.charWidth;
@@ -753,7 +757,7 @@ var Console = class {
   // Draw status line text (always on line 23)
   drawStatus(text) {
     this.clearStatus();
-    this.drawText(text, 1, 23, this.fgColor);
+    this.drawText(text, 1, this.statusLine, this.fgColor);
   }
   // Draw source section from source tree
   drawSource() {
@@ -763,8 +767,8 @@ var Console = class {
     if (ctx.ideaUnderCursor !== null) {
       this.clearStatus();
       const statusCtx = new DrawContext2(this);
-      statusCtx.row = 23;
-      statusCtx.col = 1;
+      statusCtx.row = this.statusLine;
+      statusCtx.col = 2;
       ctx.ideaUnderCursor.Info(statusCtx);
     }
   }
@@ -776,17 +780,17 @@ var Console = class {
       const endPos = token.endIndex + 1;
       const tokenText = text.slice(startPos - 1, endPos - 1);
       const color = token.idea.Color();
-      this.drawText(tokenText, startPos, 24, color);
+      this.drawText(tokenText, startPos, this.cmdLine, color);
       startPos = endPos;
     }
     if (startPos <= text.length) {
-      this.drawText(text.slice(startPos - 1), startPos, 24, "#6c7086");
+      this.drawText(text.slice(startPos - 1), startPos, this.cmdLine, "#6c7086");
     }
-    this.drawCursor(cursorPos, 24);
+    this.drawCursor(cursorPos, this.cmdLine);
   }
   // Draw cursor at position (1-indexed column)
   drawCursor(col, row) {
-    if (row < 1 || row > this.rows || col < 1 || col > this.cols) {
+    if (row < 1 || row > this.height || col < 1 || col > this.width) {
       return;
     }
     const x = (col - 1) * this.charWidth;
@@ -803,10 +807,10 @@ var Console = class {
   }
   // Get canvas dimensions
   getCols() {
-    return this.cols;
+    return this.width;
   }
   getRows() {
-    return this.rows;
+    return this.height;
   }
   // === Input handling ===
   setupKeyboardListeners() {

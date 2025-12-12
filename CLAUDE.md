@@ -34,6 +34,8 @@ Node.js, no Deno.
 
 ## Build & Development Commands
 
+We use jj instead of git and follow Conventional Commits.
+
 ### TypeScript Playground
 
 ```bash

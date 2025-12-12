@@ -1,7 +1,4 @@
 // Console - Canvas-based 80x24 character grid for Barry playground
-// Line 1-22: Source section
-// Line 23: Status line
-// Line 24: Command line
 
 import { Parser, LineView, Idea, List } from "./barry.js"
 
@@ -61,13 +58,19 @@ export class DrawContext {
 
   // Check if position is within source bounds (rows 1-22)
   inSourceBounds(): boolean {
-    return this.row >= 1 && this.row <= 22
+    return (
+      this.row >= this.console.sourceStart && this.row <= this.console.sourceEnd
+    )
   }
 }
 
 export class Console {
-  private cols = 80
-  private rows = 24
+  private width = 100
+  private height = 30
+  sourceStart = 1
+  sourceEnd = this.height - 2
+  private statusLine = this.height - 1
+  private cmdLine = this.height
   private fontSize: number
   private fontFamily = "JetBrains Mono"
 
@@ -91,7 +94,7 @@ export class Console {
   private source: List
 
   // Command line input state
-  private prompt = "(_*_) "
+  private prompt = "^..^ "
   private currentLine: string = ""
   private cursorPosition: number = 0
   private history: string[] = []
@@ -136,9 +139,9 @@ export class Console {
     // Line height is typically 1.5x font size for monospace
     this.charHeight = Math.ceil(this.fontSize * 1.5)
 
-    // Size canvas to fit exactly 80x24 characters
-    this.canvas.width = this.cols * this.charWidth
-    this.canvas.height = this.rows * this.charHeight
+    // Size canvas to fit exactly colxrows characters
+    this.canvas.width = this.width * this.charWidth
+    this.canvas.height = this.height * this.charHeight
 
     // Configure rendering context
     this.ctx.font = `${this.fontSize}px ${this.fontFamily}`
@@ -159,14 +162,14 @@ export class Console {
   clearSource(): void {
     this.ctx.fillStyle = this.bgColor
     const y = 0
-    const height = 22 * this.charHeight
+    const height = this.sourceEnd * this.charHeight
     this.ctx.fillRect(0, y, this.canvas.width, height)
   }
 
-  // Clear status line (line 23)
+  // Clear status line
   clearStatus(): void {
     this.ctx.fillStyle = this.statusBg
-    const y = 22 * this.charHeight
+    const y = (this.statusLine - 1) * this.charHeight
     const height = this.charHeight
     this.ctx.fillRect(0, y, this.canvas.width, height)
   }
@@ -174,14 +177,14 @@ export class Console {
   // Clear command line (line 24)
   clearCommand(): void {
     this.ctx.fillStyle = this.bgColor
-    const y = 23 * this.charHeight
+    const y = (this.cmdLine - 1) * this.charHeight
     const height = this.charHeight
     this.ctx.fillRect(0, y, this.canvas.width, height)
   }
 
-  // Draw text starting at console coordinates (col: 1-80, row: 1-24)
+  // Draw text starting at console coordinates
   drawText(text: string, col: number, row: number, color: string): void {
-    if (row < 1 || row > this.rows || col < 1 || col > this.cols) {
+    if (row < 1 || row > this.height || col < 1 || col > this.width) {
       return // Out of bounds
     }
 
@@ -195,7 +198,7 @@ export class Console {
   // Draw status line text (always on line 23)
   drawStatus(text: string): void {
     this.clearStatus()
-    this.drawText(text, 1, 23, this.fgColor)
+    this.drawText(text, 1, this.statusLine, this.fgColor)
   }
 
   // Draw source section from source tree
@@ -208,12 +211,11 @@ export class Console {
     if (ctx.ideaUnderCursor !== null) {
       this.clearStatus()
       const statusCtx = new DrawContext(this)
-      statusCtx.row = 23 // Status line
-      statusCtx.col = 1
+      statusCtx.row = this.statusLine
+      statusCtx.col = 2
       ctx.ideaUnderCursor.Info(statusCtx)
     }
   }
-
 
   // Draw command line with token-based coloring
   drawCommandLine(text: string, tokens: TokenInfo[], cursorPos: number): void {
@@ -227,22 +229,22 @@ export class Console {
       // Convert 1-indexed positions to 0-indexed offsets for slicing
       const tokenText = text.slice(startPos - 1, endPos - 1)
       const color = token.idea.Color()
-      this.drawText(tokenText, startPos, 24, color)
+      this.drawText(tokenText, startPos, this.cmdLine, color)
       startPos = endPos
     }
 
     // Draw any remaining text (unparsed) in gray
     if (startPos <= text.length) {
-      this.drawText(text.slice(startPos - 1), startPos, 24, "#6c7086")
+      this.drawText(text.slice(startPos - 1), startPos, this.cmdLine, "#6c7086")
     }
 
     // Draw cursor
-    this.drawCursor(cursorPos, 24)
+    this.drawCursor(cursorPos, this.cmdLine)
   }
 
   // Draw cursor at position (1-indexed column)
   private drawCursor(col: number, row: number): void {
-    if (row < 1 || row > this.rows || col < 1 || col > this.cols) {
+    if (row < 1 || row > this.height || col < 1 || col > this.width) {
       return
     }
 
@@ -265,11 +267,11 @@ export class Console {
 
   // Get canvas dimensions
   getCols(): number {
-    return this.cols
+    return this.width
   }
 
   getRows(): number {
-    return this.rows
+    return this.height
   }
 
   // === Input handling ===
@@ -473,7 +475,7 @@ export class Console {
     console.log("Tokens for:", this.currentLine)
     tokens.forEach((t, i) => {
       console.log(
-        `  [${i}] endIndex: ${t.endIndex}, idea: ${t.idea.constructor.name}, text: "${this.currentLine.slice(i === 0 ? 0 : tokens[i - 1].endIndex, t.endIndex)}"`
+        `  [${i}] endIndex: ${t.endIndex}, idea: ${t.idea.constructor.name}, text: "${this.currentLine.slice(i === 0 ? 0 : tokens[i - 1].endIndex, t.endIndex)}"`,
       )
     })
 
@@ -483,9 +485,9 @@ export class Console {
     const cursorCol = this.prompt.length + this.cursorPosition + 1
 
     // Adjust token endIndex to account for prompt
-    const adjustedTokens = tokens.map(t => ({
+    const adjustedTokens = tokens.map((t) => ({
       endIndex: t.endIndex + this.prompt.length,
-      idea: t.idea
+      idea: t.idea,
     }))
 
     this.drawCommandLine(fullText, adjustedTokens, cursorCol)
