@@ -233,8 +233,8 @@ export class Parser {
 
     // Look-ahead check: if prev is provided, try to consume it
     if (prev !== null) {
-      // Check precedence: only consume if our precedence is >= suitor
-      if (idea.precedence < suitor) {
+      // Check bind: only consume if our left bind is >= suitor
+      if (idea.leftBind < suitor) {
         rewind()
         return null
       }
@@ -272,7 +272,7 @@ export class Parser {
       const rewindPost = () => {
         this.regex.lastIndex = postPos
       }
-      const nextIdea = this.next(null, idea.precedence)
+      const nextIdea = this.next(null, idea.rightBind)
       if (nextIdea !== null) {
         if (!(idea as any).consumePost(nextIdea)) {
           // Didn't consume, rewind so next idea can be used elsewhere
@@ -321,7 +321,8 @@ export class Parser {
 
 // Base class for all ideas (AST nodes)
 export abstract class Idea {
-  precedence: number = 0
+  leftBind: number = -1
+  rightBind: number = -1
   error: string | null = null
   baseColor: Color = Color.Default
   abstract kind: Kind
@@ -443,7 +444,8 @@ export class Label extends Op {
 
   constructor() {
     super()
-    this.precedence = 1 // Very low - only higher than append (0)
+    this.leftBind = 50 // High enough to form as right argument to operators
+    this.rightBind = 1 // Low to allow operators to steal arguments
   }
 
   consumePre(prev: Idea): Idea | null {
@@ -456,6 +458,9 @@ export class Label extends Op {
 
   consumePost(next: Idea): boolean {
     this.labeled = next
+    this.returnKind = next.returnKind
+    this.leftBind = next.leftBind
+    this.rightBind = next.rightBind
     this.complete = true
     return true
   }
@@ -479,6 +484,26 @@ export class Label extends Op {
     } else {
       ctx.write("_", this.Color(), this)
     }
+  }
+
+  Eval(): Idea {
+    if (this.labeled === null) {
+      return new Blank()
+    }
+    return this.labeled.Eval()
+  }
+
+  Info(ctx: DrawContext): void {
+    ctx.write("Label ", this.baseColor)
+    if (this.name !== null) {
+      ctx.write(this.name + ":", this.baseColor)
+    } else {
+      ctx.write("_:", this.baseColor)
+    }
+    ctx.write(" => ", this.baseColor)
+
+    const result = this.Eval()
+    ctx.write(result.View(), result.Color())
   }
 }
 
@@ -620,7 +645,8 @@ export class Add extends Op {
 
   constructor() {
     super()
-    this.precedence = 10
+    this.leftBind = 10
+    this.rightBind = 10
   }
 
   consumePre(prev: Idea): Idea | null {
@@ -666,7 +692,8 @@ export class Add extends Op {
   Draw(ctx: DrawContext): void {
     if (this.left !== null) {
       const needsParens =
-        this.left.precedence > 0 && this.left.precedence < this.precedence
+        (this.left.rightBind > -1 && this.left.rightBind < this.leftBind) ||
+        this.left instanceof Label
       if (needsParens) ctx.write("(", Color.List, this)
       this.left.Draw(ctx)
       if (needsParens) ctx.write(")", Color.List, this)
@@ -676,7 +703,8 @@ export class Add extends Op {
     ctx.write("+", this.Color(), this)
     if (this.right !== null) {
       const needsParens =
-        this.right.precedence > 0 && this.right.precedence < this.precedence
+        (this.right.leftBind > -1 && this.right.leftBind < this.rightBind) ||
+        this.right instanceof Label
       if (needsParens) ctx.write("(", Color.List, this)
       this.right.Draw(ctx)
       if (needsParens) ctx.write(")", Color.List, this)
@@ -696,7 +724,8 @@ export class Mul extends Op {
 
   constructor() {
     super()
-    this.precedence = 20
+    this.leftBind = 20
+    this.rightBind = 20
   }
 
   consumePre(prev: Idea): Idea | null {
@@ -742,7 +771,8 @@ export class Mul extends Op {
   Draw(ctx: DrawContext): void {
     if (this.left !== null) {
       const needsParens =
-        this.left.precedence > 0 && this.left.precedence < this.precedence
+        (this.left.rightBind > -1 && this.left.rightBind < this.leftBind) ||
+        this.left instanceof Label
       if (needsParens) ctx.write("(", Color.List, this)
       this.left.Draw(ctx)
       if (needsParens) ctx.write(")", Color.List, this)
@@ -752,7 +782,8 @@ export class Mul extends Op {
     ctx.write("*", this.Color(), this)
     if (this.right !== null) {
       const needsParens =
-        this.right.precedence > 0 && this.right.precedence < this.precedence
+        (this.right.leftBind > -1 && this.right.leftBind < this.rightBind) ||
+        this.right instanceof Label
       if (needsParens) ctx.write("(", Color.List, this)
       this.right.Draw(ctx)
       if (needsParens) ctx.write(")", Color.List, this)

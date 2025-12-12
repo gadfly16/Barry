@@ -173,7 +173,7 @@ var Parser = class {
       });
     }
     if (prev !== null) {
-      if (idea.precedence < suitor) {
+      if (idea.leftBind < suitor) {
         rewind();
         return null;
       }
@@ -200,7 +200,7 @@ var Parser = class {
       const rewindPost = () => {
         this.regex.lastIndex = postPos;
       };
-      const nextIdea2 = this.next(null, idea.precedence);
+      const nextIdea2 = this.next(null, idea.rightBind);
       if (nextIdea2 !== null) {
         if (!idea.consumePost(nextIdea2)) {
           rewindPost();
@@ -236,7 +236,8 @@ var Parser = class {
   }
 };
 var Idea = class {
-  precedence = 0;
+  leftBind = -1;
+  rightBind = -1;
   error = null;
   baseColor = "#444444" /* Default */;
   Color() {
@@ -326,7 +327,8 @@ var Label = class extends Op {
   labeled = null;
   constructor() {
     super();
-    this.precedence = 1;
+    this.leftBind = 50;
+    this.rightBind = 1;
   }
   consumePre(prev) {
     if (prev.returnKind === "Unquoted" /* Unquoted */) {
@@ -337,6 +339,9 @@ var Label = class extends Op {
   }
   consumePost(next) {
     this.labeled = next;
+    this.returnKind = next.returnKind;
+    this.leftBind = next.leftBind;
+    this.rightBind = next.rightBind;
     this.complete = true;
     return true;
   }
@@ -358,6 +363,23 @@ var Label = class extends Op {
     } else {
       ctx.write("_", this.Color(), this);
     }
+  }
+  Eval() {
+    if (this.labeled === null) {
+      return new Blank();
+    }
+    return this.labeled.Eval();
+  }
+  Info(ctx) {
+    ctx.write("Label ", this.baseColor);
+    if (this.name !== null) {
+      ctx.write(this.name + ":", this.baseColor);
+    } else {
+      ctx.write("_:", this.baseColor);
+    }
+    ctx.write(" => ", this.baseColor);
+    const result = this.Eval();
+    ctx.write(result.View(), result.Color());
   }
 };
 var List = class _List extends Value {
@@ -463,7 +485,8 @@ var Add = class extends Op {
   right = null;
   constructor() {
     super();
-    this.precedence = 10;
+    this.leftBind = 10;
+    this.rightBind = 10;
   }
   consumePre(prev) {
     if (prev.returnKind === "Num" /* Num */) {
@@ -501,7 +524,7 @@ var Add = class extends Op {
   }
   Draw(ctx) {
     if (this.left !== null) {
-      const needsParens = this.left.precedence > 0 && this.left.precedence < this.precedence;
+      const needsParens = this.left.rightBind > -1 && this.left.rightBind < this.leftBind || this.left instanceof Label;
       if (needsParens) ctx.write("(", "#EE8888" /* List */, this);
       this.left.Draw(ctx);
       if (needsParens) ctx.write(")", "#EE8888" /* List */, this);
@@ -510,7 +533,7 @@ var Add = class extends Op {
     }
     ctx.write("+", this.Color(), this);
     if (this.right !== null) {
-      const needsParens = this.right.precedence > 0 && this.right.precedence < this.precedence;
+      const needsParens = this.right.leftBind > -1 && this.right.leftBind < this.rightBind || this.right instanceof Label;
       if (needsParens) ctx.write("(", "#EE8888" /* List */, this);
       this.right.Draw(ctx);
       if (needsParens) ctx.write(")", "#EE8888" /* List */, this);
@@ -527,7 +550,8 @@ var Mul = class extends Op {
   right = null;
   constructor() {
     super();
-    this.precedence = 20;
+    this.leftBind = 20;
+    this.rightBind = 20;
   }
   consumePre(prev) {
     if (prev.returnKind === "Num" /* Num */) {
@@ -565,7 +589,7 @@ var Mul = class extends Op {
   }
   Draw(ctx) {
     if (this.left !== null) {
-      const needsParens = this.left.precedence > 0 && this.left.precedence < this.precedence;
+      const needsParens = this.left.rightBind > -1 && this.left.rightBind < this.leftBind || this.left instanceof Label;
       if (needsParens) ctx.write("(", "#EE8888" /* List */, this);
       this.left.Draw(ctx);
       if (needsParens) ctx.write(")", "#EE8888" /* List */, this);
@@ -574,7 +598,7 @@ var Mul = class extends Op {
     }
     ctx.write("*", this.Color(), this);
     if (this.right !== null) {
-      const needsParens = this.right.precedence > 0 && this.right.precedence < this.precedence;
+      const needsParens = this.right.leftBind > -1 && this.right.leftBind < this.rightBind || this.right instanceof Label;
       if (needsParens) ctx.write("(", "#EE8888" /* List */, this);
       this.right.Draw(ctx);
       if (needsParens) ctx.write(")", "#EE8888" /* List */, this);
