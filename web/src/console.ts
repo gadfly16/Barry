@@ -314,6 +314,7 @@ export class Console {
       "End",
       "Delete",
       " ",
+      "'",
     ]
     if (handledKeys.includes(e.key)) {
       e.preventDefault()

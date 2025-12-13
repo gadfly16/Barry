@@ -29,6 +29,16 @@ export enum Color {
   Default = "#444444", // Dark gray default
 }
 
+// Enum for bind values
+enum Bind {
+  NonBinding = 0,
+  Append,
+  LabelRight,
+  Additive,
+  Multiplicative,
+  LabelLeft,
+}
+
 // Combined regex pattern for token matching with global flag
 // Order matters: quoted strings, wraps (parens), numbers, seals, unquoted strings, whitespace
 const TOKEN_PATTERN =
@@ -151,7 +161,7 @@ export class Parser {
 
     // Append loop: consume ideas until EOF
     while (true) {
-      const idea = this.next(null, 0)
+      const idea = this.next(null, Bind.Append)
       if (idea === null) {
         break
       }
@@ -234,7 +244,7 @@ export class Parser {
     // Look-ahead check: if prev is provided, try to consume it
     if (prev !== null) {
       // Check bind: only consume if our left bind is >= suitor
-      if (idea.leftBind < suitor) {
+      if (idea.lBind < suitor) {
         rewind()
         return null
       }
@@ -272,7 +282,7 @@ export class Parser {
       const rewindPost = () => {
         this.regex.lastIndex = postPos
       }
-      const nextIdea = this.next(null, idea.rightBind)
+      const nextIdea = this.next(null, idea.rBind)
       if (nextIdea !== null) {
         if (!(idea as any).consumePost(nextIdea)) {
           // Didn't consume, rewind so next idea can be used elsewhere
@@ -284,7 +294,7 @@ export class Parser {
     // Handle List - run append loop until Closure or EOF
     if (idea instanceof List) {
       while (true) {
-        const item = this.next(null, 0)
+        const item = this.next(null, Bind.Append)
         if (item === null) {
           // EOF - end of list
           break
@@ -321,8 +331,8 @@ export class Parser {
 
 // Base class for all ideas (AST nodes)
 export abstract class Idea {
-  leftBind: number = -1
-  rightBind: number = -1
+  lBind: number = Bind.NonBinding
+  rBind: number = Bind.NonBinding
   error: string | null = null
   baseColor: Color = Color.Default
   abstract kind: Kind
@@ -338,14 +348,17 @@ export abstract class Idea {
 
   Info(ctx: DrawContext): void {
     ctx.write(this.kind, this.baseColor)
-    if (this.error !== null) {
-      ctx.write(" ", this.baseColor)
-      ctx.write(this.error, Color.Error)
-    }
+    this.Error(ctx)
 
     const result = this.Eval()
     ctx.write(" => ", this.baseColor)
     ctx.write(result.View(), result.Color())
+  }
+
+  Error(ctx: DrawContext): void {
+    if (this.error !== null) {
+      ctx.write(" >< " + this.error, Color.Error)
+    }
   }
 
   Eval(): Idea {
@@ -444,8 +457,8 @@ export class Label extends Op {
 
   constructor() {
     super()
-    this.leftBind = 50 // High enough to form as right argument to operators
-    this.rightBind = 1 // Low to allow operators to steal arguments
+    this.lBind = Bind.LabelLeft // High enough to form as right argument to operators
+    this.rBind = Bind.LabelRight // Low to allow operators to steal arguments
   }
 
   consumePre(prev: Idea): Idea | null {
@@ -459,8 +472,8 @@ export class Label extends Op {
   consumePost(next: Idea): boolean {
     this.labeled = next
     this.returnKind = next.returnKind
-    this.leftBind = next.leftBind
-    this.rightBind = next.rightBind
+    this.lBind = next.lBind
+    this.rBind = next.rBind
     this.complete = true
     return true
   }
@@ -496,10 +509,11 @@ export class Label extends Op {
   Info(ctx: DrawContext): void {
     ctx.write("Label ", this.baseColor)
     if (this.name !== null) {
-      ctx.write(this.name + ":", this.baseColor)
+      ctx.write(this.name + ":", Color.Unquoted)
     } else {
       ctx.write("_:", this.baseColor)
     }
+    this.Error(ctx)
     ctx.write(" => ", this.baseColor)
 
     const result = this.Eval()
@@ -516,10 +530,6 @@ export class List extends Value {
   labelMap: Map<string, Label> = new Map() // name → Label (fast lookup)
   breakpoint: number = -1 // -1: horizontal, 0: break immediately (vertical), >0: break after nth element
 
-  constructor() {
-    super()
-  }
-
   append(idea: Idea) {
     this.items.push(idea)
 
@@ -527,7 +537,7 @@ export class List extends Value {
     if (idea instanceof Label && idea.name !== null) {
       // Check for duplicate labels
       if (this.labelMap.has(idea.name)) {
-        idea.error = `duplicate label`
+        idea.error = `duplicate name`
       } else {
         this.labelMap.set(idea.name, idea)
       }
@@ -594,10 +604,6 @@ export class Nothing extends Value {
   returnKind = Kind.Nothing
   baseColor = Color.List
 
-  constructor() {
-    super()
-  }
-
   View(): string {
     return "()"
   }
@@ -645,8 +651,8 @@ export class Add extends Op {
 
   constructor() {
     super()
-    this.leftBind = 10
-    this.rightBind = 10
+    this.lBind = Bind.Additive
+    this.rBind = Bind.Additive
   }
 
   consumePre(prev: Idea): Idea | null {
@@ -692,7 +698,7 @@ export class Add extends Op {
   Draw(ctx: DrawContext): void {
     if (this.left !== null) {
       const needsParens =
-        (this.left.rightBind > -1 && this.left.rightBind < this.leftBind) ||
+        (this.left.rBind > Bind.NonBinding && this.left.rBind < this.lBind) ||
         this.left instanceof Label
       if (needsParens) ctx.write("(", Color.List, this)
       this.left.Draw(ctx)
@@ -703,7 +709,7 @@ export class Add extends Op {
     ctx.write("+", this.Color(), this)
     if (this.right !== null) {
       const needsParens =
-        (this.right.leftBind > -1 && this.right.leftBind < this.rightBind) ||
+        (this.right.lBind > Bind.NonBinding && this.right.lBind < this.rBind) ||
         this.right instanceof Label
       if (needsParens) ctx.write("(", Color.List, this)
       this.right.Draw(ctx)
@@ -724,8 +730,8 @@ export class Mul extends Op {
 
   constructor() {
     super()
-    this.leftBind = 20
-    this.rightBind = 20
+    this.lBind = Bind.Multiplicative
+    this.rBind = Bind.Multiplicative
   }
 
   consumePre(prev: Idea): Idea | null {
@@ -771,7 +777,7 @@ export class Mul extends Op {
   Draw(ctx: DrawContext): void {
     if (this.left !== null) {
       const needsParens =
-        (this.left.rightBind > -1 && this.left.rightBind < this.leftBind) ||
+        (this.left.rBind > Bind.NonBinding && this.left.rBind < this.lBind) ||
         this.left instanceof Label
       if (needsParens) ctx.write("(", Color.List, this)
       this.left.Draw(ctx)
@@ -782,7 +788,7 @@ export class Mul extends Op {
     ctx.write("*", this.Color(), this)
     if (this.right !== null) {
       const needsParens =
-        (this.right.leftBind > -1 && this.right.leftBind < this.rightBind) ||
+        (this.right.lBind > Bind.NonBinding && this.right.lBind < this.rBind) ||
         this.right instanceof Label
       if (needsParens) ctx.write("(", Color.List, this)
       this.right.Draw(ctx)

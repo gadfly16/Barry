@@ -23,6 +23,15 @@ var Color = /* @__PURE__ */ ((Color2) => {
   Color2["Default"] = "#444444";
   return Color2;
 })(Color || {});
+var Bind = /* @__PURE__ */ ((Bind2) => {
+  Bind2[Bind2["NonBinding"] = 0] = "NonBinding";
+  Bind2[Bind2["Append"] = 1] = "Append";
+  Bind2[Bind2["LabelRight"] = 2] = "LabelRight";
+  Bind2[Bind2["Additive"] = 3] = "Additive";
+  Bind2[Bind2["Multiplicative"] = 4] = "Multiplicative";
+  Bind2[Bind2["LabelLeft"] = 5] = "LabelLeft";
+  return Bind2;
+})(Bind || {});
 var TOKEN_PATTERN = /(?:"(?<quoted>[^"]*)"|(?<list>\()|(?<closure>\))|(?<number>-?\d+\.?\d*)|(?<seal>[^\w\s"()]+)|(?<unquoted>[^:\s]+)|(?<append>\s+))/g;
 function LineView(idea) {
   if (idea instanceof List) {
@@ -111,7 +120,7 @@ var Parser = class {
     this.tokens = [];
     const rootList = new List();
     while (true) {
-      const idea = this.next(null, 0);
+      const idea = this.next(null, 1 /* Append */);
       if (idea === null) {
         break;
       }
@@ -173,7 +182,7 @@ var Parser = class {
       });
     }
     if (prev !== null) {
-      if (idea.leftBind < suitor) {
+      if (idea.lBind < suitor) {
         rewind();
         return null;
       }
@@ -200,7 +209,7 @@ var Parser = class {
       const rewindPost = () => {
         this.regex.lastIndex = postPos;
       };
-      const nextIdea2 = this.next(null, idea.rightBind);
+      const nextIdea2 = this.next(null, idea.rBind);
       if (nextIdea2 !== null) {
         if (!idea.consumePost(nextIdea2)) {
           rewindPost();
@@ -209,7 +218,7 @@ var Parser = class {
     }
     if (idea instanceof List) {
       while (true) {
-        const item = this.next(null, 0);
+        const item = this.next(null, 1 /* Append */);
         if (item === null) {
           break;
         }
@@ -236,8 +245,8 @@ var Parser = class {
   }
 };
 var Idea = class {
-  leftBind = -1;
-  rightBind = -1;
+  lBind = 0 /* NonBinding */;
+  rBind = 0 /* NonBinding */;
   error = null;
   baseColor = "#444444" /* Default */;
   Color() {
@@ -246,13 +255,15 @@ var Idea = class {
   }
   Info(ctx) {
     ctx.write(this.kind, this.baseColor);
-    if (this.error !== null) {
-      ctx.write(" ", this.baseColor);
-      ctx.write(this.error, "#FF4422" /* Error */);
-    }
+    this.Error(ctx);
     const result = this.Eval();
     ctx.write(" => ", this.baseColor);
     ctx.write(result.View(), result.Color());
+  }
+  Error(ctx) {
+    if (this.error !== null) {
+      ctx.write(" >< " + this.error, "#FF4422" /* Error */);
+    }
   }
   Eval() {
     return new Blank();
@@ -327,8 +338,8 @@ var Label = class extends Op {
   labeled = null;
   constructor() {
     super();
-    this.leftBind = 50;
-    this.rightBind = 1;
+    this.lBind = 5 /* LabelLeft */;
+    this.rBind = 2 /* LabelRight */;
   }
   consumePre(prev) {
     if (prev.returnKind === "Unquoted" /* Unquoted */) {
@@ -340,8 +351,8 @@ var Label = class extends Op {
   consumePost(next) {
     this.labeled = next;
     this.returnKind = next.returnKind;
-    this.leftBind = next.leftBind;
-    this.rightBind = next.rightBind;
+    this.lBind = next.lBind;
+    this.rBind = next.rBind;
     this.complete = true;
     return true;
   }
@@ -373,10 +384,11 @@ var Label = class extends Op {
   Info(ctx) {
     ctx.write("Label ", this.baseColor);
     if (this.name !== null) {
-      ctx.write(this.name + ":", this.baseColor);
+      ctx.write(this.name + ":", "#eed49f" /* Unquoted */);
     } else {
       ctx.write("_:", this.baseColor);
     }
+    this.Error(ctx);
     ctx.write(" => ", this.baseColor);
     const result = this.Eval();
     ctx.write(result.View(), result.Color());
@@ -391,14 +403,11 @@ var List = class _List extends Value {
   // name → Label (fast lookup)
   breakpoint = -1;
   // -1: horizontal, 0: break immediately (vertical), >0: break after nth element
-  constructor() {
-    super();
-  }
   append(idea) {
     this.items.push(idea);
     if (idea instanceof Label && idea.name !== null) {
       if (this.labelMap.has(idea.name)) {
-        idea.error = `duplicate label`;
+        idea.error = `duplicate name`;
       } else {
         this.labelMap.set(idea.name, idea);
       }
@@ -447,9 +456,6 @@ var Nothing = class extends Value {
   kind = "Bit" /* Nothing */;
   returnKind = "Bit" /* Nothing */;
   baseColor = "#EE8888" /* List */;
-  constructor() {
-    super();
-  }
   View() {
     return "()";
   }
@@ -485,8 +491,8 @@ var Add = class extends Op {
   right = null;
   constructor() {
     super();
-    this.leftBind = 10;
-    this.rightBind = 10;
+    this.lBind = 3 /* Additive */;
+    this.rBind = 3 /* Additive */;
   }
   consumePre(prev) {
     if (prev.returnKind === "Num" /* Num */) {
@@ -524,7 +530,7 @@ var Add = class extends Op {
   }
   Draw(ctx) {
     if (this.left !== null) {
-      const needsParens = this.left.rightBind > -1 && this.left.rightBind < this.leftBind || this.left instanceof Label;
+      const needsParens = this.left.rBind > 0 /* NonBinding */ && this.left.rBind < this.lBind || this.left instanceof Label;
       if (needsParens) ctx.write("(", "#EE8888" /* List */, this);
       this.left.Draw(ctx);
       if (needsParens) ctx.write(")", "#EE8888" /* List */, this);
@@ -533,7 +539,7 @@ var Add = class extends Op {
     }
     ctx.write("+", this.Color(), this);
     if (this.right !== null) {
-      const needsParens = this.right.leftBind > -1 && this.right.leftBind < this.rightBind || this.right instanceof Label;
+      const needsParens = this.right.lBind > 0 /* NonBinding */ && this.right.lBind < this.rBind || this.right instanceof Label;
       if (needsParens) ctx.write("(", "#EE8888" /* List */, this);
       this.right.Draw(ctx);
       if (needsParens) ctx.write(")", "#EE8888" /* List */, this);
@@ -550,8 +556,8 @@ var Mul = class extends Op {
   right = null;
   constructor() {
     super();
-    this.leftBind = 20;
-    this.rightBind = 20;
+    this.lBind = 4 /* Multiplicative */;
+    this.rBind = 4 /* Multiplicative */;
   }
   consumePre(prev) {
     if (prev.returnKind === "Num" /* Num */) {
@@ -589,7 +595,7 @@ var Mul = class extends Op {
   }
   Draw(ctx) {
     if (this.left !== null) {
-      const needsParens = this.left.rightBind > -1 && this.left.rightBind < this.leftBind || this.left instanceof Label;
+      const needsParens = this.left.rBind > 0 /* NonBinding */ && this.left.rBind < this.lBind || this.left instanceof Label;
       if (needsParens) ctx.write("(", "#EE8888" /* List */, this);
       this.left.Draw(ctx);
       if (needsParens) ctx.write(")", "#EE8888" /* List */, this);
@@ -598,7 +604,7 @@ var Mul = class extends Op {
     }
     ctx.write("*", this.Color(), this);
     if (this.right !== null) {
-      const needsParens = this.right.leftBind > -1 && this.right.leftBind < this.rightBind || this.right instanceof Label;
+      const needsParens = this.right.lBind > 0 /* NonBinding */ && this.right.lBind < this.rBind || this.right instanceof Label;
       if (needsParens) ctx.write("(", "#EE8888" /* List */, this);
       this.right.Draw(ctx);
       if (needsParens) ctx.write(")", "#EE8888" /* List */, this);
@@ -841,7 +847,8 @@ var Console = class {
       "Home",
       "End",
       "Delete",
-      " "
+      " ",
+      "'"
     ];
     if (handledKeys.includes(e.key)) {
       e.preventDefault();
