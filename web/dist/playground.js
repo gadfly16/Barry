@@ -17,9 +17,9 @@ var Color = /* @__PURE__ */ ((Color2) => {
   Color2["Black"] = "#101113";
   Color2["Light"] = "#b2b3b5";
   Color2["Middle"] = "#8e8f91";
-  Color2["Dark"] = "#202123";
-  Color2["Aqua"] = "#61cbd5";
-  Color2["Blue"] = "#2d5ccb";
+  Color2["Dark"] = "#1c1d21";
+  Color2["Aqua"] = "#51dbe5";
+  Color2["Blue"] = "#2d5cfb";
   Color2["Brown"] = "#6f5700";
   Color2["Violet"] = "#ce51e4";
   Color2["Yellow"] = "#d6e26e";
@@ -28,7 +28,7 @@ var Color = /* @__PURE__ */ ((Color2) => {
   Color2["Red"] = "#f01f1c";
   Color2["Green"] = "#74bb46";
   Color2["Orange"] = "#c85d18";
-  Color2["Sky"] = "#6d90f1";
+  Color2["Sky"] = "#6290ff";
   return Color2;
 })(Color || {});
 var Bind = /* @__PURE__ */ ((Bind2) => {
@@ -80,6 +80,7 @@ var NameMap = /* @__PURE__ */ new Map([]);
 var Parser = class {
   regex;
   input = "";
+  fresh = false;
   tokens = [];
   constructor() {
     this.regex = new RegExp(TOKEN_PATTERN.source, TOKEN_PATTERN.flags);
@@ -126,20 +127,9 @@ var Parser = class {
     this.input = input;
     this.regex.lastIndex = 0;
     this.tokens = [];
-    const rootList = new List();
-    while (true) {
-      const idea = this.next(null, 1 /* Append */);
-      if (idea === null) {
-        break;
-      }
-      rootList.append(idea);
-    }
-    if (rootList.items.length === 0) {
-      return new Nothing();
-    } else if (rootList.items.length === 1) {
-      return rootList.items[0];
-    }
-    return rootList;
+    this.fresh = true;
+    const result = this.next(null, 1 /* Append */);
+    return result ?? new Nothing();
   }
   // Get next idea from current position
   // prev is the idea to the left (can be null)
@@ -154,40 +144,45 @@ var Parser = class {
       this.regex.lastIndex = savedPos;
       this.tokens.length = savedTokenCount;
     };
-    let match = this.regex.exec(this.input);
-    while (match && match.groups?.append !== void 0) {
-      match = this.regex.exec(this.input);
-    }
-    if (!match || !match.groups) {
-      rewind();
-      return null;
-    }
     let idea = null;
-    if (match.groups.number !== void 0) {
-      idea = new Num(match.groups.number);
-    } else if (match.groups.quoted !== void 0) {
-      idea = new Str(match.groups.quoted);
-    } else if (match.groups.list !== void 0) {
-      idea = new List();
-    } else if (match.groups.closure !== void 0) {
-      idea = new Closure();
-    } else if (match.groups.unquoted !== void 0) {
-      if (NameMap.has(match.groups.unquoted)) {
-        idea = NameMap.get(match.groups.unquoted)();
-      } else {
-        idea = new Unquoted(match.groups.unquoted);
-      }
-    } else if (match.groups.seal !== void 0) {
-      idea = this.parseSeal(match.groups.seal, this.regex.lastIndex);
+    if (this.fresh) {
+      idea = new List(true);
+      this.fresh = false;
     } else {
-      rewind();
-      return null;
-    }
-    if (!(idea instanceof Closure)) {
-      this.tokens.push({
-        endIndex: this.regex.lastIndex,
-        idea
-      });
+      let match = this.regex.exec(this.input);
+      while (match && match.groups?.append !== void 0) {
+        match = this.regex.exec(this.input);
+      }
+      if (!match || !match.groups) {
+        rewind();
+        return null;
+      }
+      if (match.groups.number !== void 0) {
+        idea = new Num(match.groups.number);
+      } else if (match.groups.quoted !== void 0) {
+        idea = new Str(match.groups.quoted);
+      } else if (match.groups.list !== void 0) {
+        idea = new List();
+      } else if (match.groups.closure !== void 0) {
+        idea = new Closure();
+      } else if (match.groups.unquoted !== void 0) {
+        if (NameMap.has(match.groups.unquoted)) {
+          idea = NameMap.get(match.groups.unquoted)();
+        } else {
+          idea = new Unquoted(match.groups.unquoted);
+        }
+      } else if (match.groups.seal !== void 0) {
+        idea = this.parseSeal(match.groups.seal, this.regex.lastIndex);
+      } else {
+        rewind();
+        return null;
+      }
+      if (!(idea instanceof Closure)) {
+        this.tokens.push({
+          endIndex: this.regex.lastIndex,
+          idea
+        });
+      }
     }
     if (prev !== null) {
       if (idea.lBind < suitor) {
@@ -225,24 +220,40 @@ var Parser = class {
       }
     }
     if (idea instanceof List) {
+      let list = idea;
       while (true) {
-        const item = this.next(null, 1 /* Append */);
+        let item = this.next(null, 1 /* Append */);
         if (item === null) {
           break;
         }
         if (item instanceof Closure) {
-          this.tokens.push({
-            endIndex: this.regex.lastIndex,
-            idea
-          });
-          break;
+          if (list.implicit) {
+            const nll = new List();
+            nll.implicit = true;
+            list.implicit = false;
+            nll.append(list);
+            this.tokens.push({
+              endIndex: this.regex.lastIndex,
+              idea: list
+            });
+            list = nll;
+            continue;
+          } else {
+            this.tokens.push({
+              endIndex: this.regex.lastIndex,
+              idea: item
+            });
+            break;
+          }
         }
-        idea.append(item);
+        list.append(item);
       }
-      if (idea.items.length === 0) {
+      if (list.items.length === 0) {
         idea = new Nothing();
-      } else if (idea.items.length === 1) {
-        idea = idea.items[0];
+      } else if (list.items.length === 1) {
+        idea = list.items[0];
+      } else {
+        idea = list;
       }
     }
     const nextIdea = this.next(idea, suitor);
@@ -310,7 +321,7 @@ var Num = class extends Value {
 var Str = class extends Value {
   kind = "Str" /* Str */;
   returnKind = "Str" /* Str */;
-  baseColor = "#6d90f1" /* Sky */;
+  baseColor = "#51dbe5" /* Aqua */;
   value;
   constructor(match) {
     super();
@@ -342,7 +353,7 @@ var Unquoted = class extends Value {
 var Label = class extends Op {
   kind = "Label" /* Label */;
   returnKind = "Label" /* Label */;
-  baseColor = "#2d5ccb" /* Blue */;
+  baseColor = "#2d5cfb" /* Blue */;
   name = null;
   labeled = null;
   constructor() {
@@ -398,20 +409,25 @@ var Label = class extends Op {
       ctx.write("_:", this.baseColor);
     }
     this.JamInfo(ctx);
-    ctx.write(" => ", this.baseColor);
+    ctx.write(" => ", "#b2b3b5" /* Light */);
     const result = this.Eval();
     ctx.write(result.View(), result.Color());
   }
 };
 var List = class _List extends Value {
   kind = "List" /* List */;
+  implicit = false;
   returnKind = "List" /* List */;
-  baseColor = "#6d90f1" /* Sky */;
+  baseColor = "#6290ff" /* Sky */;
   items = [];
   labelMap = /* @__PURE__ */ new Map();
   // name → Label (fast lookup)
   breakpoint = -1;
   // -1: horizontal, 0: break immediately (vertical), >0: break after nth element
+  constructor(isLine = false) {
+    super();
+    this.implicit = isLine;
+  }
   append(idea) {
     this.items.push(idea);
     if (idea instanceof Label && idea.name !== null) {
@@ -691,7 +707,7 @@ var Console = class {
   canvas;
   ctx;
   // Colors
-  sourceColor = "#202123" /* Dark */;
+  sourceColor = "#1c1d21" /* Dark */;
   statusBg = "#101113" /* Black */;
   cursorColor = "#8e8f91" /* Middle */;
   // Parser

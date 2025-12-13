@@ -1,4 +1,4 @@
-// barry.ts
+// barry.t
 // A simple parser for parsing expressions into an AST of ideas
 
 import { DrawContext } from "./console.js"
@@ -23,9 +23,9 @@ export enum Color {
   Black = "#101113",
   Light = "#b2b3b5",
   Middle = "#8e8f91",
-  Dark = "#202123",
-  Aqua = "#61cbd5",
-  Blue = "#2d5ccb",
+  Dark = "#1c1d21",
+  Aqua = "#51dbe5",
+  Blue = "#2d5cfb",
   Brown = "#6f5700",
   Violet = "#ce51e4",
   Yellow = "#d6e26e",
@@ -34,7 +34,7 @@ export enum Color {
   Red = "#f01f1c",
   Green = "#74bb46",
   Orange = "#c85d18",
-  Sky = "#6d90f1",
+  Sky = "#6290ff",
 }
 
 // Enum for bind values
@@ -102,6 +102,7 @@ const NameMap = new Map<string, () => Idea>([])
 export class Parser {
   private regex: RegExp
   private input: string = ""
+  private fresh: boolean = false
   tokens: { endIndex: number; idea: Idea }[] = []
 
   constructor() {
@@ -163,29 +164,10 @@ export class Parser {
     this.input = input
     this.regex.lastIndex = 0
     this.tokens = []
+    this.fresh = true
 
-    // Create root list
-    const rootList = new List()
-
-    // Append loop: consume ideas until EOF
-    while (true) {
-      const idea = this.next(null, Bind.Append)
-      if (idea === null) {
-        break
-      }
-      rootList.append(idea)
-    }
-
-    // Post-processing: convert based on number of items
-    if (rootList.items.length === 0) {
-      // Empty list becomes Nothing
-      return new Nothing()
-    } else if (rootList.items.length === 1) {
-      // Single element: (x) = x
-      return rootList.items[0]
-    }
-    // Multiple elements: return the list
-    return rootList
+    const result = this.next(null, Bind.Append)
+    return result ?? new Nothing()
   }
 
   // Get next idea from current position
@@ -202,51 +184,56 @@ export class Parser {
       this.tokens.length = savedTokenCount
     }
 
-    let match = this.regex.exec(this.input)
-
-    while (match && match.groups?.append !== undefined) {
-      match = this.regex.exec(this.input)
-    }
-
-    if (!match || !match.groups) {
-      rewind()
-      return null
-    }
-
     let idea: Idea | null = null
 
-    if (match.groups.number !== undefined) {
-      idea = new Num(match.groups.number)
-    } else if (match.groups.quoted !== undefined) {
-      // Create Str idea from quoted string (quotes already removed by regex)
-      idea = new Str(match.groups.quoted)
-    } else if (match.groups.list !== undefined) {
-      // Opening parenthesis - create List
-      idea = new List()
-    } else if (match.groups.closure !== undefined) {
-      // Closing parenthesis - create Closure
-      idea = new Closure()
-    } else if (match.groups.unquoted !== undefined) {
-      // Look up in NameMap, create Unquoted if not found
-      if (NameMap.has(match.groups.unquoted)) {
-        idea = NameMap.get(match.groups.unquoted)!()
-      } else {
-        idea = new Unquoted(match.groups.unquoted)
-      }
-    } else if (match.groups.seal !== undefined) {
-      // Parse seal - may reset index for remaining characters
-      idea = this.parseSeal(match.groups.seal, this.regex.lastIndex)
+    if (this.fresh) {
+      idea = new List(true)
+      this.fresh = false
     } else {
-      rewind()
-      return null
-    }
+      let match = this.regex.exec(this.input)
 
-    // Add token info for successfully parsed idea (skip Closure - it's handled by List)
-    if (!(idea instanceof Closure)) {
-      this.tokens.push({
-        endIndex: this.regex.lastIndex,
-        idea: idea,
-      })
+      while (match && match.groups?.append !== undefined) {
+        match = this.regex.exec(this.input)
+      }
+
+      if (!match || !match.groups) {
+        rewind()
+        return null
+      }
+
+      if (match.groups.number !== undefined) {
+        idea = new Num(match.groups.number)
+      } else if (match.groups.quoted !== undefined) {
+        // Create Str idea from quoted string (quotes already removed by regex)
+        idea = new Str(match.groups.quoted)
+      } else if (match.groups.list !== undefined) {
+        // Opening parenthesis - create List
+        idea = new List()
+      } else if (match.groups.closure !== undefined) {
+        // Closing parenthesis - create Closure
+        idea = new Closure()
+      } else if (match.groups.unquoted !== undefined) {
+        // Look up in NameMap, create Unquoted if not found
+        if (NameMap.has(match.groups.unquoted)) {
+          idea = NameMap.get(match.groups.unquoted)!()
+        } else {
+          idea = new Unquoted(match.groups.unquoted)
+        }
+      } else if (match.groups.seal !== undefined) {
+        // Parse seal - may reset index for remaining characters
+        idea = this.parseSeal(match.groups.seal, this.regex.lastIndex)
+      } else {
+        rewind()
+        return null
+      }
+
+      // Add token info for successfully parsed idea (skip Closure - it's handled by List)
+      if (!(idea instanceof Closure)) {
+        this.tokens.push({
+          endIndex: this.regex.lastIndex,
+          idea: idea,
+        })
+      }
     }
 
     // Look-ahead check: if prev is provided, try to consume it
@@ -301,28 +288,45 @@ export class Parser {
 
     // Handle List - run append loop until Closure or EOF
     if (idea instanceof List) {
+      let list: List = idea
       while (true) {
-        const item = this.next(null, Bind.Append)
+        let item = this.next(null, Bind.Append)
         if (item === null) {
           // EOF - end of list
           break
         }
         if (item instanceof Closure) {
           // Add the same List idea again for the closing paren
-          this.tokens.push({
-            endIndex: this.regex.lastIndex,
-            idea: idea,
-          })
-          break
+          if (list.implicit) {
+            // Creating new line list on unmatched closed parens
+            const nll = new List()
+            nll.implicit = true
+            list.implicit = false
+            nll.append(list)
+            this.tokens.push({
+              endIndex: this.regex.lastIndex,
+              idea: list,
+            })
+            list = nll
+            continue
+          } else {
+            this.tokens.push({
+              endIndex: this.regex.lastIndex,
+              idea: item,
+            })
+            break
+          }
         }
-        idea.append(item)
+        list.append(item)
       }
 
       // Post-process: apply single element rule
-      if (idea.items.length === 0) {
+      if (list.items.length === 0) {
         idea = new Nothing()
-      } else if (idea.items.length === 1) {
-        idea = idea.items[0]
+      } else if (list.items.length === 1) {
+        idea = list.items[0]
+      } else {
+        idea = list
       }
     }
 
@@ -418,7 +422,7 @@ export class Num extends Value {
 export class Str extends Value {
   kind = Kind.Str
   returnKind = Kind.Str
-  baseColor = Color.Sky
+  baseColor = Color.Aqua
   value: string
 
   constructor(match: string) {
@@ -523,7 +527,7 @@ export class Label extends Op {
       ctx.write("_:", this.baseColor)
     }
     this.JamInfo(ctx)
-    ctx.write(" => ", this.baseColor)
+    ctx.write(" => ", Color.Light)
     const result = this.Eval()
     ctx.write(result.View(), result.Color())
   }
@@ -532,11 +536,17 @@ export class Label extends Op {
 // List idea - contains sequence of ideas
 export class List extends Value {
   kind = Kind.List
+  implicit = false
   returnKind = Kind.List
   baseColor = Color.Sky
   items: Idea[] = []
   labelMap: Map<string, Label> = new Map() // name → Label (fast lookup)
   breakpoint: number = -1 // -1: horizontal, 0: break immediately (vertical), >0: break after nth element
+
+  constructor(isLine: boolean = false) {
+    super()
+    this.implicit = isLine
+  }
 
   append(idea: Idea) {
     this.items.push(idea)
