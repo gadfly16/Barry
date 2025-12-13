@@ -1,6 +1,6 @@
 // Console - Canvas-based 80x24 character grid for Barry playground
 
-import { Parser, LineView, Idea, List } from "./barry.js"
+import { Parser, LineView, Idea, List, Color } from "./barry.js"
 
 export interface TokenInfo {
   endIndex: number // End position in text
@@ -83,9 +83,9 @@ export class Console {
   private ctx: CanvasRenderingContext2D
 
   // Colors
-  private bgColor = "#24273a" // Background
-  private fgColor = "#cad3f5" // Default text
-  private statusBg = "#1e2030" // Status line background
+  private sourceColor = Color.Dark
+  private statusBg = Color.Black
+  private cursorColor = Color.Middle
 
   // Parser
   private parser = new Parser()
@@ -154,13 +154,13 @@ export class Console {
 
   // Clear entire console
   clear(): void {
-    this.ctx.fillStyle = this.bgColor
+    this.ctx.fillStyle = this.sourceColor
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height)
   }
 
   // Clear source section (lines 1-22)
   clearSource(): void {
-    this.ctx.fillStyle = this.bgColor
+    this.ctx.fillStyle = this.sourceColor
     const y = 0
     const height = this.sourceEnd * this.charHeight
     this.ctx.fillRect(0, y, this.canvas.width, height)
@@ -176,7 +176,7 @@ export class Console {
 
   // Clear command line (line 24)
   clearCommand(): void {
-    this.ctx.fillStyle = this.bgColor
+    this.ctx.fillStyle = this.sourceColor
     const y = (this.cmdLine - 1) * this.charHeight
     const height = this.charHeight
     this.ctx.fillRect(0, y, this.canvas.width, height)
@@ -198,7 +198,7 @@ export class Console {
   // Draw status line text (always on line 23)
   drawStatus(text: string): void {
     this.clearStatus()
-    this.drawText(text, 1, this.statusLine, this.fgColor)
+    this.drawText(text, 1, this.statusLine, this.cursorColor)
   }
 
   // Draw source section from source tree
@@ -252,7 +252,7 @@ export class Console {
     const x = (col - 1) * this.charWidth
     const y = row * this.charHeight - 2 // Bottom of cell
 
-    this.ctx.fillStyle = this.fgColor
+    this.ctx.fillStyle = this.cursorColor
     this.ctx.fillRect(x, y, this.charWidth, 2)
   }
 

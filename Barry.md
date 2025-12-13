@@ -1011,37 +1011,39 @@ The second line exemplifies how you can make simple topics harder to understand
 by throwing insignificant details on your audience. The first line is just a
 simple Mult idea _without_ attributes. The second also. Barry just calls them
 incomplete operators. In themselves they are not reducible to a single value,
-but they can be used as operators themselves, by giving them their missing
-argument.
+but they can be fed with other ideas by the <- or Feed operator.
 
 ```
 addFive: (+ 5)
-4 addFive        >> evaluates to 9
+addFive <- 4     >> evaluates to 9
 ```
 
-In this regard they're somewhat similar to operators.
-
-A blank can be used to explicitly leave argument slots unfilled. This way you
-can leave out arguments in the middle of the argument list.
+A blank is _not_ a null value of a kind: it explicitly says that "this argument
+is unfilled". With it you can leave out arguments even in the middle of an
+argument list.
 
 ```
-clear: filter _ ?
-clear (0 1 2 1 0)   >> will evaluate to 1 2 1
+double: 2*_
+double <- 0 1 2   >> will evaluate to 0 2 4
 ```
 
-The \_ seal represents the idea of a blank. A blank is _not_ a null value of a
-kind: it explicitly says that "this argument is unfilled". Incomplete operators
-can come handy as lambda functions.
+The map like behavior comes from the fact that multiplying a List with a Num
+multiplies all the elements in the List: Feed just passes the list to the
+incomplete operator.
+
+Incomplete operators can come handy as lambda functions.
 
 ```
 filter (1 2 3 4 5 6) %2   >> evaluates to (2 4 6)
 ```
 
-In most regards incomplete operators can be used as any other idea.
+In most regards incomplete operators can be used as any other idea, so they can
+form Lists for example. map feeds the element of a List one by one to the
+incomplete operator.
 
 ```
-ops: (+1) (-2) (*3) (/4)   >> a list of incomplete operators
-map ops 5                  >> evaluates to 6 3 15 1.25
+ops: _+1 _-2 _*3 _/4   >> a list of incomplete operators
+map ops 5              >> evaluates to 6 3 15 1.25
 ```
 
 ## To Infinity and Back

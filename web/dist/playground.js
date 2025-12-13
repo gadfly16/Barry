@@ -13,14 +13,22 @@ var Kind = /* @__PURE__ */ ((Kind2) => {
   return Kind2;
 })(Kind || {});
 var Color = /* @__PURE__ */ ((Color2) => {
-  Color2["Number"] = "#a6da95";
-  Color2["String"] = "#ffb0b0";
-  Color2["Unquoted"] = "#eed49f";
-  Color2["Label"] = "#44BBEE";
-  Color2["List"] = "#EE8888";
-  Color2["Operator"] = "#CC88EE";
-  Color2["Error"] = "#FF4422";
-  Color2["Default"] = "#444444";
+  Color2["White"] = "#f7f8fa";
+  Color2["Black"] = "#101113";
+  Color2["Light"] = "#b2b3b5";
+  Color2["Middle"] = "#8e8f91";
+  Color2["Dark"] = "#202123";
+  Color2["Aqua"] = "#61cbd5";
+  Color2["Blue"] = "#2d5ccb";
+  Color2["Brown"] = "#6f5700";
+  Color2["Violet"] = "#ce51e4";
+  Color2["Yellow"] = "#d6e26e";
+  Color2["Pink"] = "#ce857a";
+  Color2["Mint"] = "#aff188";
+  Color2["Red"] = "#f01f1c";
+  Color2["Green"] = "#74bb46";
+  Color2["Orange"] = "#c85d18";
+  Color2["Sky"] = "#6d90f1";
   return Color2;
 })(Color || {});
 var Bind = /* @__PURE__ */ ((Bind2) => {
@@ -248,9 +256,9 @@ var Idea = class {
   lBind = 0 /* NonBinding */;
   rBind = 0 /* NonBinding */;
   error = null;
-  baseColor = "#444444" /* Default */;
+  baseColor = "#101113" /* Black */;
   Color() {
-    if (this.error !== null) return "#FF4422" /* Error */;
+    if (this.error !== null) return "#f01f1c" /* Red */;
     return this.baseColor;
   }
   Info(ctx) {
@@ -262,7 +270,7 @@ var Idea = class {
   }
   Error(ctx) {
     if (this.error !== null) {
-      ctx.write(" >< " + this.error, "#FF4422" /* Error */);
+      ctx.write(" >< " + this.error, "#f01f1c" /* Red */);
     }
   }
   Eval() {
@@ -272,6 +280,7 @@ var Idea = class {
 var Op = class extends Idea {
   complete = false;
   // Operators track completion
+  baseColor = "#ce51e4" /* Violet */;
   consumePre(prev) {
     return null;
   }
@@ -285,7 +294,7 @@ var Value = class extends Idea {
 var Num = class extends Value {
   kind = "Num" /* Num */;
   returnKind = "Num" /* Num */;
-  baseColor = "#a6da95" /* Number */;
+  baseColor = "#aff188" /* Mint */;
   value;
   constructor(match) {
     super();
@@ -301,7 +310,7 @@ var Num = class extends Value {
 var Str = class extends Value {
   kind = "Str" /* Str */;
   returnKind = "Str" /* Str */;
-  baseColor = "#ffb0b0" /* String */;
+  baseColor = "#6d90f1" /* Sky */;
   value;
   constructor(match) {
     super();
@@ -317,7 +326,7 @@ var Str = class extends Value {
 var Unquoted = class extends Value {
   kind = "Unquoted" /* Unquoted */;
   returnKind = "Unquoted" /* Unquoted */;
-  baseColor = "#eed49f" /* Unquoted */;
+  baseColor = "#c85d18" /* Orange */;
   value;
   constructor(match) {
     super();
@@ -333,7 +342,7 @@ var Unquoted = class extends Value {
 var Label = class extends Op {
   kind = "Label" /* Label */;
   returnKind = "Label" /* Label */;
-  baseColor = "#44BBEE" /* Label */;
+  baseColor = "#2d5ccb" /* Blue */;
   name = null;
   labeled = null;
   constructor() {
@@ -384,7 +393,7 @@ var Label = class extends Op {
   Info(ctx) {
     ctx.write("Label ", this.baseColor);
     if (this.name !== null) {
-      ctx.write(this.name + ":", "#eed49f" /* Unquoted */);
+      ctx.write(this.name + ":", "#c85d18" /* Orange */);
     } else {
       ctx.write("_:", this.baseColor);
     }
@@ -397,7 +406,7 @@ var Label = class extends Op {
 var List = class _List extends Value {
   kind = "List" /* List */;
   returnKind = "List" /* List */;
-  baseColor = "#EE8888" /* List */;
+  baseColor = "#6d90f1" /* Sky */;
   items = [];
   labelMap = /* @__PURE__ */ new Map();
   // name → Label (fast lookup)
@@ -451,11 +460,18 @@ var List = class _List extends Value {
       ctx.write(")", this.Color(), this);
     }
   }
+  Info(ctx) {
+    ctx.write("List ", this.baseColor);
+    ctx.write("#" + this.items.length + " ", this.baseColor);
+    const result = this.Eval();
+    ctx.write(" => ", this.baseColor);
+    ctx.write(result.View(), result.Color());
+  }
 };
 var Nothing = class extends Value {
   kind = "Bit" /* Nothing */;
   returnKind = "Bit" /* Nothing */;
-  baseColor = "#EE8888" /* List */;
+  baseColor = "#8e8f91" /* Middle */;
   View() {
     return "()";
   }
@@ -486,7 +502,6 @@ var Blank = class extends Idea {
 var Add = class extends Op {
   kind = "Add" /* Add */;
   returnKind = "Operator" /* Operator */;
-  baseColor = "#CC88EE" /* Operator */;
   left = null;
   right = null;
   constructor() {
@@ -531,18 +546,18 @@ var Add = class extends Op {
   Draw(ctx) {
     if (this.left !== null) {
       const needsParens = this.left.rBind > 0 /* NonBinding */ && this.left.rBind < this.lBind || this.left instanceof Label;
-      if (needsParens) ctx.write("(", "#EE8888" /* List */, this);
+      if (needsParens) ctx.write("(", "#aff188" /* Mint */, this);
       this.left.Draw(ctx);
-      if (needsParens) ctx.write(")", "#EE8888" /* List */, this);
+      if (needsParens) ctx.write(")", "#aff188" /* Mint */, this);
     } else {
       ctx.write("_", this.Color(), this);
     }
     ctx.write("+", this.Color(), this);
     if (this.right !== null) {
       const needsParens = this.right.lBind > 0 /* NonBinding */ && this.right.lBind < this.rBind || this.right instanceof Label;
-      if (needsParens) ctx.write("(", "#EE8888" /* List */, this);
+      if (needsParens) ctx.write("(", "#aff188" /* Mint */, this);
       this.right.Draw(ctx);
-      if (needsParens) ctx.write(")", "#EE8888" /* List */, this);
+      if (needsParens) ctx.write(")", "#aff188" /* Mint */, this);
     } else {
       ctx.write("_", this.Color(), this);
     }
@@ -551,7 +566,6 @@ var Add = class extends Op {
 var Mul = class extends Op {
   kind = "Mul" /* Mul */;
   returnKind = "Operator" /* Operator */;
-  baseColor = "#CC88EE" /* Operator */;
   left = null;
   right = null;
   constructor() {
@@ -596,18 +610,18 @@ var Mul = class extends Op {
   Draw(ctx) {
     if (this.left !== null) {
       const needsParens = this.left.rBind > 0 /* NonBinding */ && this.left.rBind < this.lBind || this.left instanceof Label;
-      if (needsParens) ctx.write("(", "#EE8888" /* List */, this);
+      if (needsParens) ctx.write("(", "#aff188" /* Mint */, this);
       this.left.Draw(ctx);
-      if (needsParens) ctx.write(")", "#EE8888" /* List */, this);
+      if (needsParens) ctx.write(")", "#aff188" /* Mint */, this);
     } else {
       ctx.write("_", this.Color(), this);
     }
     ctx.write("*", this.Color(), this);
     if (this.right !== null) {
       const needsParens = this.right.lBind > 0 /* NonBinding */ && this.right.lBind < this.rBind || this.right instanceof Label;
-      if (needsParens) ctx.write("(", "#EE8888" /* List */, this);
+      if (needsParens) ctx.write("(", "#aff188" /* Mint */, this);
       this.right.Draw(ctx);
-      if (needsParens) ctx.write(")", "#EE8888" /* List */, this);
+      if (needsParens) ctx.write(")", "#aff188" /* Mint */, this);
     } else {
       ctx.write("_", this.Color(), this);
     }
@@ -674,12 +688,9 @@ var Console = class {
   canvas;
   ctx;
   // Colors
-  bgColor = "#24273a";
-  // Background
-  fgColor = "#cad3f5";
-  // Default text
-  statusBg = "#1e2030";
-  // Status line background
+  sourceColor = "#202123" /* Dark */;
+  cursorColor = "#8e8f91" /* Middle */;
+  statusBg = "#101113" /* Black */;
   // Parser
   parser = new Parser();
   // Source - vertical implicit list of lines
@@ -726,12 +737,12 @@ var Console = class {
   }
   // Clear entire console
   clear() {
-    this.ctx.fillStyle = this.bgColor;
+    this.ctx.fillStyle = this.sourceColor;
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
   }
   // Clear source section (lines 1-22)
   clearSource() {
-    this.ctx.fillStyle = this.bgColor;
+    this.ctx.fillStyle = this.sourceColor;
     const y = 0;
     const height = this.sourceEnd * this.charHeight;
     this.ctx.fillRect(0, y, this.canvas.width, height);
@@ -745,7 +756,7 @@ var Console = class {
   }
   // Clear command line (line 24)
   clearCommand() {
-    this.ctx.fillStyle = this.bgColor;
+    this.ctx.fillStyle = this.sourceColor;
     const y = (this.cmdLine - 1) * this.charHeight;
     const height = this.charHeight;
     this.ctx.fillRect(0, y, this.canvas.width, height);
@@ -763,7 +774,7 @@ var Console = class {
   // Draw status line text (always on line 23)
   drawStatus(text) {
     this.clearStatus();
-    this.drawText(text, 1, this.statusLine, this.fgColor);
+    this.drawText(text, 1, this.statusLine, this.cursorColor);
   }
   // Draw source section from source tree
   drawSource() {
@@ -801,7 +812,7 @@ var Console = class {
     }
     const x = (col - 1) * this.charWidth;
     const y = row * this.charHeight - 2;
-    this.ctx.fillStyle = this.fgColor;
+    this.ctx.fillStyle = this.cursorColor;
     this.ctx.fillRect(x, y, this.charWidth, 2);
   }
   // Get character dimensions (for DrawContext)

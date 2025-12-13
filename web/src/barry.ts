@@ -19,14 +19,22 @@ export enum Kind {
 
 // Enum for syntax colors
 export enum Color {
-  Number = "#a6da95",
-  String = "#ffb0b0",
-  Unquoted = "#eed49f",
-  Label = "#44BBEE",
-  List = "#EE8888",
-  Operator = "#CC88EE",
-  Error = "#FF4422",
-  Default = "#444444", // Dark gray default
+  White = "#f7f8fa",
+  Black = "#101113",
+  Light = "#b2b3b5",
+  Middle = "#8e8f91",
+  Dark = "#202123",
+  Aqua = "#61cbd5",
+  Blue = "#2d5ccb",
+  Brown = "#6f5700",
+  Violet = "#ce51e4",
+  Yellow = "#d6e26e",
+  Pink = "#ce857a",
+  Mint = "#aff188",
+  Red = "#f01f1c",
+  Green = "#74bb46",
+  Orange = "#c85d18",
+  Sky = "#6d90f1",
 }
 
 // Enum for bind values
@@ -334,7 +342,7 @@ export abstract class Idea {
   lBind: number = Bind.NonBinding
   rBind: number = Bind.NonBinding
   error: string | null = null
-  baseColor: Color = Color.Default
+  baseColor: Color = Color.Black
   abstract kind: Kind
   abstract returnKind: Kind
 
@@ -342,7 +350,7 @@ export abstract class Idea {
   abstract Draw(ctx: DrawContext): void
 
   Color(): Color {
-    if (this.error !== null) return Color.Error
+    if (this.error !== null) return Color.Red
     return this.baseColor
   }
 
@@ -357,7 +365,7 @@ export abstract class Idea {
 
   Error(ctx: DrawContext): void {
     if (this.error !== null) {
-      ctx.write(" >< " + this.error, Color.Error)
+      ctx.write(" >< " + this.error, Color.Red)
     }
   }
 
@@ -369,6 +377,7 @@ export abstract class Idea {
 // Op - base class for operators
 export abstract class Op extends Idea {
   complete: boolean = false // Operators track completion
+  baseColor = Color.Violet
 
   consumePre(prev: Idea): Idea | null {
     return null
@@ -388,7 +397,7 @@ export abstract class Value extends Idea {
 export class Num extends Value {
   kind = Kind.Num
   returnKind = Kind.Num
-  baseColor = Color.Number
+  baseColor = Color.Mint
   value: number
 
   constructor(match: string | number) {
@@ -409,7 +418,7 @@ export class Num extends Value {
 export class Str extends Value {
   kind = Kind.Str
   returnKind = Kind.Str
-  baseColor = Color.String
+  baseColor = Color.Sky
   value: string
 
   constructor(match: string) {
@@ -430,7 +439,7 @@ export class Str extends Value {
 export class Unquoted extends Value {
   kind = Kind.Unquoted
   returnKind = Kind.Unquoted
-  baseColor = Color.Unquoted
+  baseColor = Color.Orange
   value: string
 
   constructor(match: string) {
@@ -451,7 +460,7 @@ export class Unquoted extends Value {
 export class Label extends Op {
   kind = Kind.Label
   returnKind = Kind.Label
-  baseColor = Color.Label
+  baseColor = Color.Blue
   name: string | null = null
   labeled: Idea | null = null
 
@@ -509,13 +518,12 @@ export class Label extends Op {
   Info(ctx: DrawContext): void {
     ctx.write("Label ", this.baseColor)
     if (this.name !== null) {
-      ctx.write(this.name + ":", Color.Unquoted)
+      ctx.write(this.name + ":", Color.Orange)
     } else {
       ctx.write("_:", this.baseColor)
     }
     this.Error(ctx)
     ctx.write(" => ", this.baseColor)
-
     const result = this.Eval()
     ctx.write(result.View(), result.Color())
   }
@@ -525,7 +533,7 @@ export class Label extends Op {
 export class List extends Value {
   kind = Kind.List
   returnKind = Kind.List
-  baseColor = Color.List
+  baseColor = Color.Sky
   items: Idea[] = []
   labelMap: Map<string, Label> = new Map() // name → Label (fast lookup)
   breakpoint: number = -1 // -1: horizontal, 0: break immediately (vertical), >0: break after nth element
@@ -596,13 +604,21 @@ export class List extends Value {
       ctx.write(")", this.Color(), this)
     }
   }
+
+  Info(ctx: DrawContext): void {
+    ctx.write("List ", this.baseColor)
+    ctx.write("#" + this.items.length + " ", this.baseColor)
+    const result = this.Eval()
+    ctx.write(" => ", this.baseColor)
+    ctx.write(result.View(), result.Color())
+  }
 }
 
 // Nothing idea - empty expression
 export class Nothing extends Value {
   kind = Kind.Nothing
   returnKind = Kind.Nothing
-  baseColor = Color.List
+  baseColor = Color.Middle
 
   View(): string {
     return "()"
@@ -645,7 +661,6 @@ export class Blank extends Idea {
 export class Add extends Op {
   kind = Kind.Add
   returnKind = Kind.Operator
-  baseColor = Color.Operator
   left: Idea | null = null
   right: Idea | null = null
 
@@ -700,9 +715,9 @@ export class Add extends Op {
       const needsParens =
         (this.left.rBind > Bind.NonBinding && this.left.rBind < this.lBind) ||
         this.left instanceof Label
-      if (needsParens) ctx.write("(", Color.List, this)
+      if (needsParens) ctx.write("(", Color.Mint, this)
       this.left.Draw(ctx)
-      if (needsParens) ctx.write(")", Color.List, this)
+      if (needsParens) ctx.write(")", Color.Mint, this)
     } else {
       ctx.write("_", this.Color(), this)
     }
@@ -711,9 +726,9 @@ export class Add extends Op {
       const needsParens =
         (this.right.lBind > Bind.NonBinding && this.right.lBind < this.rBind) ||
         this.right instanceof Label
-      if (needsParens) ctx.write("(", Color.List, this)
+      if (needsParens) ctx.write("(", Color.Mint, this)
       this.right.Draw(ctx)
-      if (needsParens) ctx.write(")", Color.List, this)
+      if (needsParens) ctx.write(")", Color.Mint, this)
     } else {
       ctx.write("_", this.Color(), this)
     }
@@ -724,7 +739,6 @@ export class Add extends Op {
 export class Mul extends Op {
   kind = Kind.Mul
   returnKind = Kind.Operator
-  baseColor = Color.Operator
   left: Idea | null = null
   right: Idea | null = null
 
@@ -779,9 +793,9 @@ export class Mul extends Op {
       const needsParens =
         (this.left.rBind > Bind.NonBinding && this.left.rBind < this.lBind) ||
         this.left instanceof Label
-      if (needsParens) ctx.write("(", Color.List, this)
+      if (needsParens) ctx.write("(", Color.Mint, this)
       this.left.Draw(ctx)
-      if (needsParens) ctx.write(")", Color.List, this)
+      if (needsParens) ctx.write(")", Color.Mint, this)
     } else {
       ctx.write("_", this.Color(), this)
     }
@@ -790,9 +804,9 @@ export class Mul extends Op {
       const needsParens =
         (this.right.lBind > Bind.NonBinding && this.right.lBind < this.rBind) ||
         this.right instanceof Label
-      if (needsParens) ctx.write("(", Color.List, this)
+      if (needsParens) ctx.write("(", Color.Mint, this)
       this.right.Draw(ctx)
-      if (needsParens) ctx.write(")", Color.List, this)
+      if (needsParens) ctx.write(")", Color.Mint, this)
     } else {
       ctx.write("_", this.Color(), this)
     }
