@@ -32,11 +32,13 @@ of modern, general purpose programming languages, as Barry doesn't know how to
 print and he also doesn't really care.
 
 ```
-12.34                   >> is a Num idea
-12.34 56.78             >> is a List idea of Num ideas
+12                      >> is a Num idea
+23 34 45                >> is a List idea of Num ideas
 "I'm a quoted string"   >> is a Str idea
 .                       >> a Bit idea, with an All or True or Yes value
 ()                      >> a Bit idea, with a Nothing or False or No value
+12 "foo" () .           >> is a List idea of various value ideas
+12 ("foo" 43) ()        >> a List idea as an element of a parent List idea
 ```
 
 As you can see Barry thinks in ideas. So much so, that we won't state it every
@@ -135,6 +137,32 @@ implementation detail, a temporary datastructure, that can be thrown away after
 something evaluatable has been produces.
 
 One's thrash is another's treasure: for Barry the idea tree is _precious_.
+
+## Pump Up the Jam
+
+In Barry's eyes his universe is the best possible universe of all universes for
+the simple reason, that that's the only one he perceives. This makes him very
+understanding a patient towards other beings, so much so that he finds it really
+hard to see something as erroneous. To be precise he doesn't really get the idea
+of error at all: things are like the way they are.
+
+Nevertheless sometimes there are consequences to the fact that things are the
+way they are. In Barry's case they can _jam_ the evaluation. The cononical
+example is division by zero, but addition for example is also not defined
+between a Str and a Num as Barry couldn't come up with meaningful _and_ useful
+semantics for that operation, so even shifting character values went the way of
+the Dodo.
+
+Anyway, in these cases Barry returns a jam instead of a valid value. This works
+something like the _maybe_ pattern in other languages, but it's built into the
+language and applies in general. A jam also carries a message in the shape of a
+string with the reason what may have caused the jam or just some good wishes.
+
+You can create jams with the ! operator.
+
+```
+!"went the way of the Dodo"   >> A jam
+```
 
 ## Now Barry is Different
 

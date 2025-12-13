@@ -255,22 +255,22 @@ var Parser = class {
 var Idea = class {
   lBind = 0 /* NonBinding */;
   rBind = 0 /* NonBinding */;
-  error = null;
+  jam = null;
   baseColor = "#101113" /* Black */;
   Color() {
-    if (this.error !== null) return "#f01f1c" /* Red */;
+    if (this.jam !== null) return "#f01f1c" /* Red */;
     return this.baseColor;
   }
   Info(ctx) {
     ctx.write(this.kind, this.baseColor);
-    this.Error(ctx);
+    this.JamInfo(ctx);
     const result = this.Eval();
     ctx.write(" => ", this.baseColor);
     ctx.write(result.View(), result.Color());
   }
-  Error(ctx) {
-    if (this.error !== null) {
-      ctx.write(" >< " + this.error, "#f01f1c" /* Red */);
+  JamInfo(ctx) {
+    if (this.jam !== null) {
+      ctx.write(' !"' + this.jam + '"', "#f01f1c" /* Red */);
     }
   }
   Eval() {
@@ -397,7 +397,7 @@ var Label = class extends Op {
     } else {
       ctx.write("_:", this.baseColor);
     }
-    this.Error(ctx);
+    this.JamInfo(ctx);
     ctx.write(" => ", this.baseColor);
     const result = this.Eval();
     ctx.write(result.View(), result.Color());
@@ -416,10 +416,13 @@ var List = class _List extends Value {
     this.items.push(idea);
     if (idea instanceof Label && idea.name !== null) {
       if (this.labelMap.has(idea.name)) {
-        idea.error = `duplicate name`;
-      } else {
-        this.labelMap.set(idea.name, idea);
+        let newName = idea.name + "'";
+        while (this.labelMap.has(newName)) {
+          newName += "'";
+        }
+        idea.name = newName;
       }
+      this.labelMap.set(idea.name, idea);
     }
   }
   View() {
@@ -689,8 +692,8 @@ var Console = class {
   ctx;
   // Colors
   sourceColor = "#202123" /* Dark */;
-  cursorColor = "#8e8f91" /* Middle */;
   statusBg = "#101113" /* Black */;
+  cursorColor = "#8e8f91" /* Middle */;
   // Parser
   parser = new Parser();
   // Source - vertical implicit list of lines

@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(./build.sh:*)",
-      "Bash(jj show:*)"
+      "Bash(jj show:*)",
+      "Bash(jj diff:*)"
     ],
     "deny": [],
     "ask": []

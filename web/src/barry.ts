@@ -341,7 +341,7 @@ export class Parser {
 export abstract class Idea {
   lBind: number = Bind.NonBinding
   rBind: number = Bind.NonBinding
-  error: string | null = null
+  jam: string | null = null
   baseColor: Color = Color.Black
   abstract kind: Kind
   abstract returnKind: Kind
@@ -350,22 +350,22 @@ export abstract class Idea {
   abstract Draw(ctx: DrawContext): void
 
   Color(): Color {
-    if (this.error !== null) return Color.Red
+    if (this.jam !== null) return Color.Red
     return this.baseColor
   }
 
   Info(ctx: DrawContext): void {
     ctx.write(this.kind, this.baseColor)
-    this.Error(ctx)
+    this.JamInfo(ctx)
 
     const result = this.Eval()
     ctx.write(" => ", this.baseColor)
     ctx.write(result.View(), result.Color())
   }
 
-  Error(ctx: DrawContext): void {
-    if (this.error !== null) {
-      ctx.write(" >< " + this.error, Color.Red)
+  JamInfo(ctx: DrawContext): void {
+    if (this.jam !== null) {
+      ctx.write(' !"' + this.jam + '"', Color.Red)
     }
   }
 
@@ -522,7 +522,7 @@ export class Label extends Op {
     } else {
       ctx.write("_:", this.baseColor)
     }
-    this.Error(ctx)
+    this.JamInfo(ctx)
     ctx.write(" => ", this.baseColor)
     const result = this.Eval()
     ctx.write(result.View(), result.Color())
@@ -543,12 +543,15 @@ export class List extends Value {
 
     // If it's a Label, add to labelMap for fast lookup
     if (idea instanceof Label && idea.name !== null) {
-      // Check for duplicate labels
+      // Check for duplicate labels - append ' until unique
       if (this.labelMap.has(idea.name)) {
-        idea.error = `duplicate name`
-      } else {
-        this.labelMap.set(idea.name, idea)
+        let newName = idea.name + "'"
+        while (this.labelMap.has(newName)) {
+          newName += "'"
+        }
+        idea.name = newName
       }
+      this.labelMap.set(idea.name, idea)
     }
   }
 
