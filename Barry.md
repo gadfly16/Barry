@@ -1698,3 +1698,5 @@ of Barry.
 - Barry - Leading the industry in entertainment value
 - Barry - Makes your brain a quantum computer
 - Barry - No errors, no error handling
+- Barry - More than a 100% idealistic
+- Barry - Excells in meta-physical simulations
