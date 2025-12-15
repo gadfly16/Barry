@@ -14,7 +14,7 @@ const Color = {
   Blue: "#396cff",
   Brown: "#6f5700",
   Violet: "#ce51e4",
-  Yellow: "#d6e26e",
+  Yellow: "#d6e23e",
   Pink: "#ce857a",
   Mint: "#aff188",
   Red: "#f01f1c",
@@ -31,8 +31,8 @@ const Font = {
 
 // Character metrics - initialized by StyleInit()
 let fresh = false
-let charWidth = 0
-let charHeight = 0
+let wchar = 0
+let hchar = 0
 
 // Initialize style system - measures font metrics
 function StyleInit() {
@@ -46,11 +46,11 @@ function StyleInit() {
 
   ctx.font = Font.Normal
   const metrics = ctx.measureText("M")
-  charWidth = metrics.width
+  wchar = metrics.width
   // Line height is 1.5x measured font height
   const measuredHeight =
     metrics.fontBoundingBoxAscent + metrics.fontBoundingBoxDescent
-  charHeight = Math.floor(measuredHeight * 1.25)
+  hchar = Math.floor(measuredHeight * 1.25)
 
   fresh = true
 }
@@ -58,61 +58,101 @@ function StyleInit() {
 // Style functions - draw text with specific styling
 // Each function: (canvasCtx, text, x, y) => renderedLength
 const Style = {
-  Number: (cctx, text, x, y) => {
-    cctx.fillStyle = Color.Mint
-    cctx.fillText(text, x, y)
+  Num: (w, num) => {
+    w.cc.fillStyle = Color.Mint
+    const text = num.value.toString()
+    w.cc.fillText(text, w.cx, w.cy)
     return text.length
   },
 
-  String: (cctx, text, x, y) => {
-    cctx.fillStyle = Color.Aqua
-    cctx.font = Font.Italic
-    cctx.fillText('"' + text + '"', x, y)
-    cctx.font = Font.Normal
-    return text.length + 2
-  },
-
-  Unquoted: (cctx, text, x, y) => {
-    cctx.fillStyle = Color.Orange
-    cctx.fillText(text, x, y)
+  Str: (w, str) => {
+    w.cc.fillStyle = Color.Aqua
+    w.cc.font = Font.Italic
+    const text = '"' + str.value + '"'
+    w.cc.fillText(text, w.cx, w.cy)
+    w.cc.font = w.base
     return text.length
   },
 
-  Label: (cctx, text, x, y) => {
-    cctx.fillStyle = Color.Blue
-    cctx.fillText(text, x, y)
-    cctx.fillStyle = Color.Sky
-    cctx.fillText(": ", x + text.length * charWidth, y)
-    return text.length + 2
+  Unquoted: (w, uq) => {
+    w.cc.fillStyle = Color.Orange
+    w.cc.fillText(uq.value, w.cx, w.cy)
+    return uq.value.length
   },
 
-  List: (cctx, text, x, y) => {
-    cctx.fillStyle = Color.Sky
-    cctx.fillText(text, x, y)
+  Tag: (w, idea) => {
+    text = idea.constructor.name
+    w.cc.fillStyle = Color.Green
+    w.cc.fillText(text + " ", w.cx, w.cy)
+    return idea.constructor.name.length + 1
+  },
+
+  Label: (w, label) => {
+    w.cc.fillStyle = Color.Blue
+    w.cc.font = Font.Italic
+    w.cc.fillText(label.name, w.cx, w.cy)
+    w.cc.font = w.base
+    w.cc.fillStyle = Color.Sky
+    w.cc.fillText(": ", w.cx + label.name.length * wchar, w.cy)
+    return label.name.length + 2
+  },
+
+  List: (w, _) => {
+    w.cc.fillStyle = Color.Sky
+    w.cc.fillText("(", w.cx, w.cy)
+    return 1
+  },
+
+  Append: (w, _) => {
+    w.cc.fillText(" ", w.cx, w.cy)
+    return 1
+  },
+
+  Closure: (w, _) => {
+    w.cc.fillStyle = Color.Sky
+    w.cc.fillText(")", w.cx, w.cy)
+    return 1
+  },
+
+  Nothing: (w, _) => {
+    w.cc.fillStyle = Color.Middle
+    w.cc.fillText("()", w.cx, w.cy)
+    return 2
+  },
+
+  Add: (w, _) => {
+    w.cc.fillStyle = Color.Violet
+    w.cc.fillText("+", w.cx, w.cy)
+    return 1
+  },
+
+  Mul: (w, _) => {
+    w.cc.fillStyle = Color.Violet
+    w.cc.fillText("*", w.cx, w.cy)
+    return 1
+  },
+
+  Eval: (w, _) => {
+    w.cc.fillStyle = Color.Light
+    w.cc.fillText("=> ", w.cx, w.cy)
+    return 4
+  },
+
+  Blank: (w, _) => {
+    w.cc.fillStyle = Color.Middle
+    w.cc.fillText("_", w.cx, w.cy)
+    return 1
+  },
+
+  Jam: (w, text) => {
+    w.cc.fillStyle = Color.Red
+    w.cc.fillText(text, w.cx, w.cy)
     return text.length
   },
 
-  Nothing: (cctx, text, x, y) => {
-    cctx.fillStyle = Color.Middle
-    cctx.fillText(text, x, y)
-    return text.length
-  },
-
-  Operator: (cctx, text, x, y) => {
-    cctx.fillStyle = Color.Violet
-    cctx.fillText(text, x, y)
-    return text.length
-  },
-
-  Blank: (cctx, text, x, y) => {
-    cctx.fillStyle = Color.Middle
-    cctx.fillText(text, x, y)
-    return text.length
-  },
-
-  Jam: (cctx, text, x, y) => {
-    cctx.fillStyle = Color.Red
-    cctx.fillText(text, x, y)
+  Raw: (w, text) => {
+    w.cc.fillStyle = Color.White
+    w.cc.fillText(text, w.cx, w.cy)
     return text.length
   },
 }
@@ -146,42 +186,6 @@ const Bind = {
 // Combined regex pattern for token matching
 const TOKEN_PATTERN =
   /(?:"(?<quoted>[^"]*)"|(?<list>\()|(?<closure>\))|(?<number>-?\d+\.?\d*)|(?<seal>[^\w\s"()]+)|(?<unquoted>[^:\s]+)|(?<append>\s+))/g
-
-// Helper function to display an idea - Lists without parentheses
-function LineView(idea) {
-  if (idea instanceof List) {
-    return idea.LineView()
-  }
-  return idea.View()
-}
-
-// Test function
-function Test() {
-  console.log("=== Barry Parser Tests ===")
-
-  const testCases = [
-    "1234",
-    "  42.5  ",
-    "-7",
-    "12 34",
-    "12 (34 56) 78",
-    "12+34",
-    "1+2+3",
-  ]
-
-  const parser = new Parser()
-  for (const input of testCases) {
-    console.log(`\nInput: "${input}"`)
-    try {
-      const result = parser.start(input)
-      console.log(`  Result: ${LineView(result)}`)
-    } catch (e) {
-      console.error(`  Error: ${e}`)
-    }
-  }
-
-  console.log("\n=== Tests Complete ===")
-}
 
 // Seal map - maps seal strings to their idea constructors
 const SealMap = new Map([
@@ -411,11 +415,16 @@ class Idea {
   }
 
   Status(wctx) {
-    wctx.Write(this.kind, Style.Unquoted)
+    wctx.Write(Style.Tag, this)
     this.JamInfo(wctx)
     const result = this.Eval()
-    wctx.Write(" => ", Style.Operator)
-    wctx.Write(result.View(), Style.Unquoted)
+    wctx.Write(Style.Eval)
+    wctx.cc.font = Font.Italic
+    wctx.base = Font.Italic
+    wctx.lineStart = true
+    result.Write(wctx)
+    wctx.cc.font = Font.Normal
+    wctx.base = Font.Normal
   }
 
   JamInfo(wctx) {
@@ -459,15 +468,15 @@ class Num extends Value {
 
   constructor(match) {
     super()
-    this.value = typeof match === "string" ? parseFloat(match) : match
+    this.value = parseFloat(match)
   }
 
-  View() {
+  Str() {
     return this.value.toString()
   }
 
   Write(wctx) {
-    wctx.Write(this.View(), Style.Number, this)
+    wctx.Write(Style.Num, this)
   }
 }
 
@@ -483,12 +492,12 @@ class Str extends Value {
     this.value = match
   }
 
-  View() {
+  Str() {
     return '"' + this.value + '"'
   }
 
   Write(wctx) {
-    wctx.Write(this.value, Style.String, this)
+    wctx.Write(Style.Str, this)
   }
 }
 
@@ -504,12 +513,12 @@ class Unquoted extends Value {
     this.value = match
   }
 
-  View() {
+  Str() {
     return this.value
   }
 
   Write(wctx) {
-    wctx.Write(this.View(), Style.Unquoted, this)
+    wctx.Write(Style.Unquoted, this)
   }
 }
 
@@ -544,22 +553,22 @@ class Label extends Op {
     return true
   }
 
-  View() {
+  Str() {
     const nameStr = this.name ?? "_"
-    const labeledStr = this.labeled ? this.labeled.View() : "_"
+    const labeledStr = this.labeled ? this.labeled.Str() : "_"
     return nameStr + ":" + labeledStr
   }
 
   Write(wctx) {
     if (this.name !== null) {
-      wctx.Write(this.name, Style.Label, this)
+      wctx.Write(Style.Label, this)
     } else {
-      wctx.Write("_", Style.Label, this)
+      wctx.Write(Style.Blank, this)
     }
     if (this.labeled !== null) {
       this.labeled.Write(wctx)
     } else {
-      wctx.Write("_", Style.Blank, this)
+      wctx.Write(Style.Blank, this)
     }
   }
 
@@ -571,16 +580,21 @@ class Label extends Op {
   }
 
   Status(wctx) {
-    wctx.Write("Label ", Style.Unquoted)
+    wctx.Write(Style.Tag, this)
     if (this.name !== null) {
-      wctx.Write(this.name, Style.Label)
+      wctx.Write(Style.Label, this)
     } else {
-      wctx.Write("_:", Style.Label)
+      wctx.Write(Style.Raw, "_:")
     }
     this.JamInfo(wctx)
-    wctx.Write(" => ", Style.Operator)
+    wctx.Write(Style.Eval)
     const result = this.Eval()
-    wctx.Write(result.View(), Style.Unquoted)
+    wctx.cc.font = Font.Italic
+    wctx.base = Font.Italic
+    wctx.lineStart = true
+    result.Write(wctx)
+    wctx.cc.font = Font.Normal
+    wctx.base = Font.Normal
   }
 }
 
@@ -614,12 +628,8 @@ class List extends Value {
     }
   }
 
-  View() {
-    return "(" + this.items.map((item) => item.View()).join(" ") + ")"
-  }
-
-  LineView() {
-    return this.items.map((item) => item.View()).join(" ")
+  Str() {
+    return "(" + this.items.map((item) => item.Str()).join(" ") + ")"
   }
 
   Eval() {
@@ -638,7 +648,7 @@ class List extends Value {
         this.items[0] instanceof Label)
 
     if (showParens) {
-      wctx.Write("(", Style.List, this)
+      wctx.Write(Style.List, this)
     } else if (this.breakpoint === -1) {
       wctx.lineStart = false
     }
@@ -655,22 +665,41 @@ class List extends Value {
       for (let i = 0; i < this.items.length; i++) {
         this.items[i].Write(wctx)
         if (i < this.items.length - 1) {
-          wctx.Write(" ", Style.List, this)
+          wctx.Write(Style.Append, this)
         }
       }
     }
 
     if (showParens) {
-      wctx.Write(")", Style.List, this)
+      wctx.Write(Style.Closure, this)
     }
   }
 
   Status(wctx) {
-    wctx.Write("List ", Style.Unquoted)
-    wctx.Write("#" + this.items.length + " ", Style.Number)
+    wctx.Write(Style.Tag, this)
+    wctx.Write(Style.Raw, "#" + this.items.length + " ")
     const result = this.Eval()
-    wctx.Write(" => ", Style.Operator)
-    wctx.Write(result.View(), Style.Unquoted)
+    wctx.Write(Style.Eval)
+    wctx.cc.font = Font.Italic
+    wctx.base = Font.Italic
+    wctx.lineStart = true
+    result.Write(wctx)
+    wctx.cc.font = Font.Normal
+    wctx.base = Font.Normal
+  }
+}
+
+// Closure idea - closing parenthesis marker
+class Closure extends Idea {
+  kind = Kind.Nothing
+  returnKind = Kind.Nothing
+
+  Str() {
+    throw new Error("Closure should never appear in AST")
+  }
+
+  Write(wctx) {
+    throw new Error("Closure should never appear in AST")
   }
 }
 
@@ -684,30 +713,12 @@ class Nothing extends Value {
     super()
   }
 
-  View() {
+  Str() {
     return "()"
   }
 
   Write(wctx) {
-    wctx.Write(this.View(), Style.Nothing, this)
-  }
-}
-
-// Closure idea - closing parenthesis marker
-class Closure extends Idea {
-  kind = Kind.Nothing
-  returnKind = Kind.Nothing
-
-  constructor() {
-    super()
-  }
-
-  View() {
-    throw new Error("Closure should never appear in AST")
-  }
-
-  Write(wctx) {
-    throw new Error("Closure should never appear in AST")
+    wctx.Write(Style.Nothing, this)
   }
 }
 
@@ -716,16 +727,12 @@ class Blank extends Idea {
   kind = Kind.Blank
   returnKind = Kind.Blank
 
-  constructor() {
-    super()
-  }
-
-  View() {
+  Str() {
     return "_"
   }
 
   Write(wctx) {
-    wctx.Write("_", Style.Blank, this)
+    wctx.Write(Style.Blank, this)
   }
 }
 
@@ -762,15 +769,15 @@ class Add extends Op {
     return false
   }
 
-  View() {
-    const leftArg = this.left === null ? "_" : this.left.View()
-    const rightArg = this.right === null ? "_" : this.right.View()
+  Str() {
+    const leftArg = this.left === null ? "_" : this.left.Str()
+    const rightArg = this.right === null ? "_" : this.right.Str()
     return leftArg + "+" + rightArg
   }
 
   Eval() {
     if (this.left === null || this.right === null) {
-      return new Blank()
+      return this
     }
     const leftResult = this.left.Eval()
     const rightResult = this.right.Eval()
@@ -786,22 +793,22 @@ class Add extends Op {
       const needsParens =
         (this.left.rBind > Bind.NonBinding && this.left.rBind < this.lBind) ||
         this.left instanceof Label
-      if (needsParens) wctx.Write("(", Style.Number, this)
+      if (needsParens) wctx.Write(Style.List, this.left)
       this.left.Write(wctx)
-      if (needsParens) wctx.Write(")", Style.Number, this)
+      if (needsParens) wctx.Write(Style.Closure, this.left)
     } else {
-      wctx.Write("_", Style.Blank, this)
+      wctx.Write(Style.Blank, this)
     }
-    wctx.Write("+", Style.Operator, this)
+    wctx.Write(Style.Add, this)
     if (this.right !== null) {
       const needsParens =
         (this.right.lBind > Bind.NonBinding && this.right.lBind < this.rBind) ||
         this.right instanceof Label
-      if (needsParens) wctx.Write("(", Style.Number, this)
+      if (needsParens) wctx.Write(Style.List, this.right)
       this.right.Write(wctx)
-      if (needsParens) wctx.Write(")", Style.Number, this)
+      if (needsParens) wctx.Write(Style.Closure, this.right)
     } else {
-      wctx.Write("_", Style.Blank, this)
+      wctx.Write(Style.Blank, this)
     }
   }
 }
@@ -839,15 +846,15 @@ class Mul extends Op {
     return false
   }
 
-  View() {
-    const leftArg = this.left === null ? "_" : this.left.View()
-    const rightArg = this.right === null ? "_" : this.right.View()
+  Str() {
+    const leftArg = this.left === null ? "_" : this.left.Str()
+    const rightArg = this.right === null ? "_" : this.right.Str()
     return leftArg + "*" + rightArg
   }
 
   Eval() {
     if (this.left === null || this.right === null) {
-      return new Blank()
+      return this
     }
     const leftResult = this.left.Eval()
     const rightResult = this.right.Eval()
@@ -863,22 +870,22 @@ class Mul extends Op {
       const needsParens =
         (this.left.rBind > Bind.NonBinding && this.left.rBind < this.lBind) ||
         this.left instanceof Label
-      if (needsParens) wctx.Write("(", Style.Number, this)
+      if (needsParens) wctx.Write(Style.List, this.left)
       this.left.Write(wctx)
-      if (needsParens) wctx.Write(")", Style.Number, this)
+      if (needsParens) wctx.Write(Style.Closure, this.left)
     } else {
-      wctx.Write("_", Style.Blank, this)
+      wctx.Write(Style.Blank, this)
     }
-    wctx.Write("*", Style.Operator, this)
+    wctx.Write(Style.Mul, this)
     if (this.right !== null) {
       const needsParens =
         (this.right.lBind > Bind.NonBinding && this.right.lBind < this.rBind) ||
         this.right instanceof Label
-      if (needsParens) wctx.Write("(", Style.Number, this)
+      if (needsParens) wctx.Write(Style.List, this.right)
       this.right.Write(wctx)
-      if (needsParens) wctx.Write(")", Style.Number, this)
+      if (needsParens) wctx.Write(Style.Closure, this.right)
     } else {
-      wctx.Write("_", Style.Blank, this)
+      wctx.Write(Style.Blank, this)
     }
   }
 }
@@ -887,55 +894,58 @@ class Mul extends Op {
 
 // WriteContext - provides drawing operations for ideas
 class WriteContext {
-  col = 1
-  row = 1
+  x = 1
+  y = 1
   lineStart = true
   ideaUnderCursor = null
   console
-  targetCol
-  targetRow
+  tx
+  ty
+  cc = null
+  cx = 0
+  cy = 0
+  base = Font.Normal
 
   constructor(console, targetCol = 0, targetRow = 0) {
     this.console = console
-    this.targetCol = targetCol
-    this.targetRow = targetRow
+    this.tx = targetCol
+    this.ty = targetRow
+    this.cc = this.console.ctx
   }
 
   // Write text at current position using a style function
-  Write(text, style, idea = null) {
+  Write(style, idea = null) {
     // Calculate pixel coordinates
-    const x = (this.col - 1) * charWidth
-    const y = (this.row - 1) * charHeight + charHeight / 2
+    this.cx = (this.x - 1) * wchar
+    this.cy = (this.y - 1) * hchar + hchar / 2
 
     // Call style function and get rendered length
-    const renderedLength = style(this.console.ctx, text, x, y)
+    const wlen = style(this, idea)
 
     // Cursor detection
-    if (idea !== null && this.targetRow === this.row) {
-      const startCol = this.col
-      const endCol = this.col + renderedLength - 1
-      if (this.targetCol >= startCol && this.targetCol <= endCol) {
+    if (idea !== null && typeof idea !== "string" && this.ty === this.y) {
+      if (this.tx >= this.x && this.tx <= this.x + wlen - 1) {
         this.ideaUnderCursor = idea
       }
     }
 
-    this.col += renderedLength
+    this.x += wlen
     this.lineStart = false
   }
 
   newLine() {
-    this.row++
-    this.col = 1
+    this.y++
+    this.x = 1
     this.lineStart = true
   }
 
   remainingCols() {
-    return this.console.getCols() - this.col + 1
+    return this.console.getCols() - this.x + 1
   }
 
   inSourceBounds() {
     return (
-      this.row >= this.console.sourceStart && this.row <= this.console.sourceEnd
+      this.y >= this.console.sourceStart && this.y <= this.console.sourceEnd
     )
   }
 }
@@ -975,9 +985,6 @@ class Console {
     this.canvas = canvas
 
     const ctx = this.canvas.getContext("2d", { alpha: false })
-    if (!ctx) {
-      throw new Error("Failed to get 2D context")
-    }
     this.ctx = ctx
     this.source.breakpoint = 0
 
@@ -988,8 +995,8 @@ class Console {
   }
 
   initialize() {
-    this.canvas.width = this.width * charWidth
-    this.canvas.height = this.height * charHeight
+    this.canvas.width = this.width * wchar
+    this.canvas.height = this.height * hchar
 
     this.ctx.font = Font.Normal
     this.ctx.textBaseline = "middle"
@@ -1006,21 +1013,21 @@ class Console {
   clearSource() {
     this.ctx.fillStyle = this.sourceColor
     const y = 0
-    const height = this.sourceEnd * charHeight
+    const height = this.sourceEnd * hchar
     this.ctx.fillRect(0, y, this.canvas.width, height)
   }
 
   clearStatus() {
     this.ctx.fillStyle = this.statusBg
-    const y = (this.statusLine - 1) * charHeight
-    const height = charHeight
+    const y = (this.statusLine - 1) * hchar
+    const height = hchar
     this.ctx.fillRect(0, y, this.canvas.width, height)
   }
 
   clearCommand() {
     this.ctx.fillStyle = this.sourceColor
-    const y = (this.cmdLine - 1) * charHeight
-    const height = charHeight
+    const y = (this.cmdLine - 1) * hchar
+    const height = hchar
     this.ctx.fillRect(0, y, this.canvas.width, height)
   }
 
@@ -1029,8 +1036,8 @@ class Console {
       return
     }
 
-    const x = (col - 1) * charWidth
-    const y = (row - 1) * charHeight + charHeight / 2
+    const x = (col - 1) * wchar
+    const y = (row - 1) * hchar + hchar / 2
 
     this.ctx.fillStyle = color
     this.ctx.fillText(text, x, y)
@@ -1049,9 +1056,23 @@ class Console {
     if (wctx.ideaUnderCursor !== null) {
       this.clearStatus()
       const statusWctx = new WriteContext(this)
-      statusWctx.row = this.statusLine
-      statusWctx.col = 2
+      statusWctx.y = this.statusLine
+      statusWctx.x = 2
       wctx.ideaUnderCursor.Status(statusWctx)
+    } else if (
+      this.targetRow >= this.sourceStart &&
+      this.targetRow <= this.sourceEnd
+    ) {
+      const index = this.targetRow - 1
+      this.clearStatus()
+      const statusWctx = new WriteContext(this)
+      statusWctx.y = this.statusLine
+      statusWctx.x = 2
+      if (index < this.source.items.length) {
+        this.source.items[index].Status(statusWctx)
+      } else {
+        this.source.Status(statusWctx)
+      }
     }
   }
 
@@ -1079,27 +1100,11 @@ class Console {
       return
     }
 
-    const x = (col - 1) * charWidth
-    const y = row * charHeight - 2
+    const x = (col - 1) * wchar
+    const y = row * hchar - 2
 
     this.ctx.fillStyle = this.cursorColor
-    this.ctx.fillRect(x, y, charWidth, 2)
-  }
-
-  getCharWidth() {
-    return charWidth
-  }
-
-  getCharHeight() {
-    return charHeight
-  }
-
-  getCols() {
-    return this.width
-  }
-
-  getRows() {
-    return this.height
+    this.ctx.fillRect(x, y, wchar, 2)
   }
 
   setupKeyboardListeners() {
@@ -1115,8 +1120,8 @@ class Console {
   }
 
   handleMouseMove(e) {
-    const col = Math.floor(e.offsetX / charWidth) + 1
-    const row = Math.floor(e.offsetY / charHeight) + 1
+    const col = Math.floor(e.offsetX / wchar) + 1
+    const row = Math.floor(e.offsetY / hchar) + 1
 
     this.targetCol = col
     this.targetRow = row
@@ -1272,8 +1277,11 @@ class Console {
         const result = this.parser.start(line)
         this.source.append(result)
         this.drawSource()
-        const output = LineView(result)
-        this.drawStatus(output)
+        this.clearStatus()
+        const statusWctx = new WriteContext(this)
+        statusWctx.y = this.statusLine
+        statusWctx.x = 2
+        result.Status(statusWctx)
       } catch (error) {
         this.drawStatus("Error: " + error.message)
       }
@@ -1319,3 +1327,6 @@ if (document.readyState === "loading") {
 } else {
   initDagger()
 }
+
+// Singleton ideas for writing ideas not on the IT
+const wblank = new Blank()

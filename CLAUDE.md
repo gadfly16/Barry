@@ -5,10 +5,10 @@ code in this repository.
 
 ## How to Start a Session
 
-1. **Read Playground.md first** - it contains complete architectural details and
+1. **Read Dagger.md first** - it contains complete architectural details and
    design decisions
 2. Follow the cooperation method described below
-3. Refer back to this file for project structure, build commands, and parser
+3. Refer back to this file for project structure, development workflow, and parser
    details
 
 ## Project Overview
@@ -25,63 +25,67 @@ physical quantities and robust I/O.
 
 ## Target Platform
 
-**Browser-only**: This is a TypeScript project targeting the browser. No
-Node.js, no Deno.
+**Browser-only**: This is a pure ES2024 JavaScript project targeting modern browsers. No
+Node.js, no Deno, no build process.
 
-- The code is written to run directly in browsers
-- Focus on creating a web-based playground for demonstrating Barry's concepts
-- TypeScript should compile to browser-compatible JavaScript
+- The code is written in ES2024 JavaScript and runs directly in browsers
+- Focus on creating Dagger, a web-based integrated environment for Barry
+- No compilation or bundling - direct file execution
 
-## Build & Development Commands
+## Development Workflow
 
 We use jj instead of git and follow Conventional Commits.
 
-### TypeScript Playground
+### Running Dagger
+
+No build process needed. Simply open the HTML file directly:
 
 ```bash
-# Type check and bundle with esbuild
-./build.sh
+# Option 1: Direct file open
+# Open Dagger/index.html in your browser (File → Open)
 
-# Or manually:
-cd web && npx tsc --noEmit  # Type check
-npx esbuild ./web/src/playground.ts --bundle --format=esm --outfile=./web/dist/playground.js --sourcemap --minify --tree-shaking=false
-
-# Serve locally (requires Python)
-python3 -m http.server 8000 --directory web/dist
+# Option 2: Local server (if needed for certain browser restrictions)
+python3 -m http.server 8000 --directory Dagger
 # Then open http://localhost:8000
 ```
+
+### Development
+
+Edit `Dagger/Dagger.js` directly and refresh the browser to see changes. The entire implementation is in a single ES2024 file - no compilation or bundling required.
 
 ### Project Structure
 
 ```
 Barry/
-├── web/
-│   ├── src/
-│   │   ├── barry.ts        # Parser implementation
-│   │   ├── console.ts      # Canvas-based character console
-│   │   ├── input.ts        # Keyboard input handler
-│   │   └── playground.ts   # Main entry point
-│   ├── dist/
-│   │   ├── index.html      # Main page
-│   │   └── playground.js   # Bundled output (generated)
-│   └── tsconfig.json
-├── build.sh                # Build script
-├── Playground.md           # Detailed architecture and design decisions
-├── Barry.md                # Language specification
-└── Barry_the_Funky_Seal.md # Character backstory
+├── Dagger/
+│   ├── Dagger.js           # Complete implementation (parser + editor + renderer)
+│   ├── index.html          # Main page
+│   └── favicon.ico
+├── Dagger.md               # Detailed architecture and design decisions
+├── Language.md             # Language specification details
+├── Barry.md                # Language overview and introduction
+└── CLAUDE.md               # This file
 ```
+
+All code is in the single `Dagger.js` file (~1400 lines), which contains:
+- Style system (colors, fonts, character metrics)
+- Parser (token matching, precedence-based parsing)
+- Ideas (AST nodes: Num, Str, List, Add, Mul, Label, etc.)
+- WriteContext (rendering coordination)
+- Console (canvas-based UI with three sections)
+- Keyboard input handling
 
 ## Running Tests
 
-Currently tests are embedded in barry.ts via the `Test()` function. To run:
+Tests are embedded in Dagger.js via the `Test()` function. To run:
 
-1. Build with `./build.sh`
-2. Open `web/dist/index.html` in a browser (via local server)
-3. Call `Test()` from browser console
+1. Open `Dagger/index.html` in a browser
+2. Open browser console (F12)
+3. Call `Test()` - this runs parser tests on various input cases
 
 ## Core Architecture
 
-### Parser Architecture (barry.ts)
+### Parser Architecture (Dagger.js)
 
 The parser uses a **single-pass, recursive descent** approach with several
 unique characteristics:
@@ -92,8 +96,8 @@ unique characteristics:
 
 2. **Idea-Based AST**: Everything is represented as an `Idea` (AST node). The
    main idea types are:
-   - **Value ideas**: `Num`, `Str`, `List`, `Nothing`
-   - **Operator ideas**: `Add`, `ID`, `Second` (more can be added via `SealMap`
+   - **Value ideas**: `Num`, `Str`, `Unquoted`, `List`, `Nothing`, `Blank`
+   - **Operator ideas**: `Add`, `Mul`, `Label` (more can be added via `SealMap`
      and `NameMap`)
    - **Special ideas**: `Closure` (closing parenthesis marker, never in final
      AST)
@@ -107,12 +111,12 @@ unique characteristics:
    - Look-ahead recursion allows operators to grab their arguments based on
      precedence
 
-4. **Precedence System**:
-   - Higher precedence operators bind more tightly
-   - `ID`: 100 (highest - postfix operators like `#123`)
-   - `Second`: 50 (suffix operators like `12s`)
-   - `Add`: 10 (infix operators)
-   - Default: 0 (no precedence)
+4. **Precedence System** (Bind enum):
+   - Uses an enum-based approach rather than arbitrary numbers
+   - Higher bind values bind more tightly
+   - Bind levels: `NonBinding`, `Append`, `LabelRight`, `Additive`, `Multiplicative`, `LabelLeft`
+   - Each operator declares its left (`lBind`) and right (`rBind`) binding strength
+   - Makes precedence relationships explicit and maintainable
 
 5. **Single Element Rule**: Lists with one element are automatically reduced to
    that element. Empty lists become `Nothing`.
@@ -126,9 +130,12 @@ unique characteristics:
 3. Creating a new `Idea` subclass with appropriate `precedence`, `consumePre`,
    and/or `consumePost` methods
 
-**Completeness Tracking**: Ideas have a `complete` boolean flag indicating
+**Completeness Tracking**: Operator ideas have a `complete` boolean flag indicating
 whether all required arguments are filled. This is used for validation and could
 be extended for type-checking or IDE features.
+
+**Error Handling**: Ideas have a `jam` property that stores error messages. When set,
+the idea's color changes to red and error information is displayed in the status line.
 
 ## Language Philosophy
 
@@ -146,24 +153,22 @@ Barry_the_Funky_Seal.md for the whimsical character backstory.
 
 ## Development Goals
 
-1. **Primary Goal**: Create a web-based playground to demonstrate Barry's
-   concepts
+1. **Primary Goal**: Create Dagger, an integrated computational environment for Barry
 2. **Practical Use**: Serve as glue/expression language for consistent I/O of
-   real-time physical quantities in the main project (Go backend + TS frontend)
+   real-time physical quantities in larger projects
 3. **Showcase Features**: Demonstrate the deeper potential of AST-as-product
    architecture
 
-## Playground Architecture Overview
+## Dagger Architecture Overview
 
-**See DESIGN.md for complete details.** Quick summary:
+**See Dagger.md for complete details.** Quick summary:
 
-- **Spatial editing**: Tree is source of truth (like 3D software scene graphs)
-- **Direct rendering**: Ideas draw themselves to canvas at 30fps
-- **Whitespace**: Stored sparsely on List ideas only, normalized when cursor
-  leaves
-- **Console**: Three sections (Source/Command Line/Log), pixel-based grid
-- **Continuous compilation**: Tree is always compiled, only changed tokens
-  re-parse
+- **Tree-driven rendering**: The idea tree is the source of truth
+- **Write system**: Ideas render themselves via `Write(wctx)` method
+- **WriteContext**: Coordinates rendering with character-grid positioning and cursor detection
+- **Console**: Three sections (Source/Status/Command Line), canvas-based character grid
+- **Continuous parsing**: Command line re-parses on every keystroke with token colorization
+- **Dual representation**: `Str()` for serialization, `Write()` for rendering
 
 ## Cooperation Method
 
@@ -217,7 +222,9 @@ every turn before taking it.
 
 ## Development Notes
 
-- Pure TypeScript targeting browsers (no Node.js/Deno dependencies)
-- Debug logging present in parser - useful for playground debugging
-- Build uses esbuild (same as Nerd project) with ES modules, sourcemaps, and
-  minification
+- Pure ES2024 JavaScript targeting modern browsers (no Node.js/Deno dependencies)
+- No build process, no bundling - direct browser execution
+- Single-file implementation for simplicity and transparency
+- Uses JetBrains Mono font loaded from Google Fonts
+- Canvas-based rendering with character grid system
+- All state lives in the idea tree - no separate text buffers

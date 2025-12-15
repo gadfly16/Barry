@@ -1,20 +1,18 @@
-# Barry Playground
+# Dagger
 
-The playground is an integrated computational environment, and it aims to
-provide a user experience that is similar of that of a notebook app, like
-Jupyter for example, but the dependency graph that the source describes is live,
-and ideas that are set to display their simplified form update as the graph
-changes.
+Dagger is Barry's integrated computational environment. It aims to provide a
+user experience similar to notebook apps like Jupyter, but the dependency graph
+that the source describes is live, and ideas that are set to display their
+simplified form update as the graph changes.
 
 ---
 
 ## Implementation Notes
 
-**Version**: v0.1.0 (in development) **Status**: Early implementation phase
+**Version**: v0.0.0 **Status**: Basic REPL working
 
 This document captures architectural decisions and implementation details for
-the Barry playground. It will evolve alongside the implementation and gradually
-become the playground's documentation.
+Dagger. It describes both the current implementation and the future vision.
 
 ---
 
@@ -22,17 +20,17 @@ become the playground's documentation.
 
 ### Console Structure
 
-The playground uses a canvas-based console divided into three sections:
+Dagger uses a canvas-based console divided into three sections:
 
-1. **Source Section** (top) - Displays the idea tree as standard notation
-2. **Status Line** (middle) - Shows current state/context information
-3. **Command Line** (bottom) - REPL-style input for experimentation
+1. **Source Section** (top) - Displays the idea tree in Barry Standard Notation
+2. **Status Line** (middle) - Shows current state/context information (idea type, evaluation result)
+3. **Command Line** (bottom) - REPL-style input with real-time syntax highlighting
 
 ### Core Principle: Tree-Driven Rendering
 
 **The idea tree is the source of truth.** The console does not maintain a
 character buffer for the source section. Instead, ideas render themselves
-directly to the canvas.
+directly to the canvas via their `Write()` method.
 
 ### Source of Truth Model
 
@@ -74,237 +72,206 @@ deterministically.
 
 ## Idea Rendering System
 
-Every idea in the standard notation implements two key methods:
+Every idea implements two key methods for dual representation:
 
 ### `Str(): string`
 
-**Purpose**: Serialize the idea to standard notation (BSN - Barry Standard
-Notation)
+**Purpose**: Serialize the idea to Barry Standard Notation (BSN)
 
 - Produces complete, valid Barry source code
-- Used for storage/persistence
+- Used for storage/persistence and debugging
 - Recursive: calls `Str()` on children
 - Always produces parseable output
 
 **Example**:
 
-```typescript
+```javascript
 // Add idea with left=1, right=2
-Add.Str() => "1+2"
+add.Str() // => "1+2"
 ```
 
-### `Draw(ctx: DrawContext): void`
+### `Write(wctx: WriteContext): void`
 
-**Purpose**: Render the idea to canvas
+**Purpose**: Render the idea to canvas with styling
 
-- **Lazy evaluation** - aggressively culls ideas outside viewport
-- Receives canvas context to draw into
-- Recursively calls children's `Draw()` with context
-- Each idea controls its own color, style, presentation
-- Parent ideas can pass hints to children (e.g., nesting level, available width)
+- Uses `WriteContext` for character-grid positioning
+- Calls `wctx.Write(style, idea)` to render each visual element
+- Each idea controls its own presentation and parenthesization
+- Handles cursor detection and syntax highlighting
+- Parent ideas determine when children need parentheses based on binding strength
 
 **Example**:
 
-```typescript
-// Add idea draws its left, the "+", then right
-Add.Draw(ctx) {
-  this.left?.Draw(ctx)
-  ctx.drawText("+", color.operator)
-  this.right?.Draw(ctx)
+```javascript
+// Add idea writes its left, the "+", then right
+Write(wctx) {
+  if (this.left !== null) {
+    const needsParens = (this.left.rBind > Bind.NonBinding && this.left.rBind < this.lBind)
+    if (needsParens) wctx.Write(Style.List, this)
+    this.left.Write(wctx)
+    if (needsParens) wctx.Write(Style.Closure, this)
+  } else {
+    wctx.Write(Style.Blank, this)
+  }
+  wctx.Write(Style.Add, this)
+  // ... similar for right operand
 }
 ```
 
-### The `Str()` vs `Draw()` Overlap
+### The `Str()` vs `Write()` Overlap
 
 Both methods traverse the tree and produce standard notation output, but serve
 different purposes. We keep them separate and simple rather than creating
 abstraction overhead. `Str()` is simple recursive string concatenation while
-`Draw()` is complex with layout, culling, and styling. The overlap in tree
-traversal is acceptable.
+`Write()` handles canvas rendering, cursor detection, and styling. The overlap in
+tree traversal is acceptable.
 
 ---
 
-## Editing State: Edit Ideas
+## Editing State: Token-Based Highlighting
 
-### The Edit Idea Concept
+### Current Implementation (v0.0.0)
 
-An **Edit** is a special idea type that wraps code under construction. It
-bridges the gap between raw text input and validated idea trees.
+The command line uses **token-based syntax highlighting** rather than full Edit ideas.
+As the user types, the parser continuously re-parses the input and produces a token list.
 
-**Edit Structure** (conceptual):
+**TokenInfo Structure**:
 
-```typescript
-class Edit extends Idea {
-  rawText: string; // Source text with all formatting
-  tokens: TokenInfo[]; // Maps text positions to parsed ideas
-  tree: Idea | null; // Parsed result (may contain ErrorIdea nodes)
+```javascript
+{
+  endIndex: number,  // End position in text
+  idea: Idea         // The parsed idea at this position
 }
 ```
 
-**TokenInfo Structure** (current implementation):
+**How it works**:
+1. User types in command line
+2. Parser runs `start(currentLine)` on every keystroke
+3. Parser populates `tokens` array as it parses
+4. `redrawCommandLine()` uses tokens to color each part of the input
+5. Each idea's color comes from its `Color()` method (or red if `jam` is set)
 
-```typescript
-interface TokenInfo {
-  endIndex: number; // End position in text
-  idea: Idea; // The parsed idea at this position
-}
-```
+### Future: Full Edit Ideas (Not Yet Implemented)
 
-### Edit Scope and Lifecycle
+The complete vision includes **Edit ideas** that wrap code under construction
+and maintain the raw text ↔ tree mapping. This would enable:
 
-**Scope**: An Edit wraps a single line of code (possibly including vertical
-breaks via indentation). Barry is designed for line-by-line parsing - even when
-loading files, the parser processes line by line.
+- In-place source editing (not just command line)
+- Semantic propagation (label resolution, type checking) across the entire tree
+- Multiple concurrent edits
+- Graceful error handling with partial parses
 
-**Lifecycle stages**:
+**Planned lifecycle**:
+1. User starts editing → Edit wrapper created
+2. Continuous parsing on every keystroke
+3. Semantic propagation through entire tree
+4. Solidification when cursor leaves (discard raw text, keep pure tree)
 
-1. **Creation** - User starts typing, Edit is created with raw text
-
-2. **Continuous Parsing** - Every keystroke re-parses:
-   - Updates `tokens` array (maps text positions to ideas)
-   - Updates local `tree` (may contain Err nodes)
-
-3. **Semantic Propagation** - After each parse, changes ripple through entire
-   tree:
-   - Label definitions may resolve previously-unresolved Str ideas into
-     references
-   - Type constraints propagate (e.g., Add requires Num operands)
-   - Errors can appear/disappear anywhere based on these semantic changes
-   - **This happens at every keystroke for live feedback**
-   - Requires hydrated tree for performance (full semantic analysis per
-     keystroke)
-
-4. **Solidification** - When cursor leaves edit area:
-   - Edit wrapper is removed
-   - Raw text and tokens discarded
-   - Pure idea tree remains (even if still incomplete/errored)
-
-**Example of semantic propagation**:
-```
-Line 1: x + 5      # Initially: Str("x") + Num(5) - type error
-Line 2: x: 12      # Label resolves Line 1's x into Ref(x)
-                   # Type check now passes: Ref(x) + Num(5) valid
-```
-
-**Multiple Edits**: Any number of Edits can coexist in the tree simultaneously.
-Users may edit multiple lines at once (though uncommon).
-
-**Location**: Edits live directly in their position in the tree structure - they
-are regular ideas, not special containers.
-
-### Edit Rendering
-
-Edits render using their TokenInfo list for syntax highlighting:
-
-```
-rawText: "12 + abc"
-tokens: [
-  { endIndex: 2, idea: Num(12) },        // Green
-  { endIndex: 5, idea: Add(_,_) },       // Purple
-  { endIndex: 9, idea: Str("abc") }      // Yellow
-]
-```
-
-Each idea provides its own color via `Color()` method. Unparsed text (after
-last token) renders in gray.
+Not implemented in v0.0.0 - current version only supports command line input
+with append-only source display.
 
 ---
 
-## v0.1.0 Scope
+## v0.0.0 - Current State
 
-**Goal**: Get command line → source flow working with horizontal lines only
+**What's Working:**
 
-### Included
+- ✓ Command line REPL with history (arrow up/down)
+- ✓ Real-time syntax highlighting as you type
+- ✓ Parser with bind-based precedence system
+- ✓ Ideas: Num, Str, Unquoted, Label, List, Nothing, Blank
+- ✓ Operators: Add (+), Mul (*), Label (:)
+- ✓ Write() system for rendering to canvas
+- ✓ Eval() for simple numeric expressions
+- ✓ Status line shows idea type and evaluation result
+- ✓ Source display (append-only from command line)
+- ✓ Character grid with JetBrains Mono font
+- ✓ Cursor detection in command line
 
-- ✓ Command line REPL functionality
-- ✓ Parse command line input
-- ✓ Add valid lines to source (as idea tree)
-- ✓ Render source section from idea tree
-- ✓ Basic syntax highlighting via token colors
-- ✓ Error display in command line
-- ✓ Single horizontal line support only
+**Not Yet Implemented:**
 
-### Explicitly Excluded
-
-- ✗ Multiline input
+- ✗ Source editing (only command line input works)
+- ✗ Multiline input / vertical implicit lists
 - ✗ Indentation handling
-- ✗ Vertical implicit lists
-- ✗ Source editing (only append from command line)
-- ✗ Labels and name resolution
-- ✗ Most operators (only `+` for testing)
-- ✗ Cursor positioning in source
+- ✗ Edit ideas for in-place editing
+- ✗ Most operators (only +, *, : work)
+- ✗ Name resolution / references
 - ✗ Viewport scrolling/culling
+- ✗ Mouse interaction
+- ✗ Error ideas with proper jam handling
 
-### Success Criteria
+**Example Session:**
 
-User can:
+```
+^..^ 12+34
+Num => 46
 
-1. Type `12 + 34` in command line
-2. Press Enter
-3. See `12+34` appear in source section (formatted)
-4. See `46` in command line output (if we implement eval)
-5. Repeat with another line
+^..^ x: 100
+Label => 100
 
----
-
-## Implementation Phases
-
-### Phase 1: Console Layout (Current)
-
-- Split canvas into three sections
-- Basic rendering for each section
-- Status line shows static text
-
-### Phase 2: Line Buffer & Parser Integration
-
-- Implement LineBuffer structure
-- Connect parser to command line input
-- Real-time token colorization as user types
-
-### Phase 3: Tree Rendering
-
-- Implement `Str()` for existing ideas
-- Implement `Draw()` for existing ideas
-- Render source section from idea tree
-
-### Phase 4: Command Line → Source Flow
-
-- Parse command on Enter
-- Convert to idea tree
-- Add tree to source
-- Clear command line
-- Redraw source section
+^..^ 5*6
+Num => 30
+```
 
 ---
 
-## Open Questions
+## Technical Details
 
-1. **Token emission pattern**: Use shared `Emit()` method or accept duplication?
-2. **Source storage**: Array of idea trees (one per line)? Single root list?
-3. **Color scheme**: Define standard colors for each TokenKind
-4. **Error recovery**: How to handle partial parses in source?
-5. **Canvas performance**: At what tree size do we need culling?
+### WriteContext System
+
+The `WriteContext` class coordinates rendering between ideas and the canvas:
+
+- **Character grid positioning**: Tracks current column/row
+- **Pixel calculation**: Converts grid coords to pixel coords using `wchar`/`hchar`
+- **Style delegation**: Ideas call `wctx.Write(style, idea)` where style functions handle the actual drawing
+- **Cursor detection**: Tracks which idea is under the cursor based on target col/row
+- **Section boundaries**: Knows about source/status/command line regions
+
+**Key methods:**
+- `Write(style, idea)`: Render an element, advance column counter, detect cursor
+- `newLine()`: Advance to next row, reset column
+- `remainingCols()`: Calculate available space
+
+### Style System
+
+Styles are functions: `(wctx, idea) => renderedLength`
+
+Each style function:
+1. Sets canvas context properties (color, font, etc.)
+2. Calls `cc.fillText()` to draw
+3. Returns the number of characters rendered
+
+This keeps styling logic separate from idea logic while allowing ideas to control
+their appearance by choosing which styles to use.
+
+### Parser Token List
+
+The parser builds a `tokens` array as a side effect of parsing:
+```javascript
+tokens.push({ endIndex: this.regex.lastIndex, idea: idea })
+```
+
+This enables syntax highlighting without a separate tokenization pass. The command
+line uses this to color each parsed element as the user types.
 
 ---
 
-## Technical Decisions Log
+## Future Development
 
-### 2025-12-06: Initial Architecture
+**Near term:**
+- Source editing (not just append-only)
+- Mouse click to position cursor
+- Vertical implicit lists (indentation-based)
+- More operators
+- Error handling with jam property
 
-- Tree-driven rendering chosen over buffered approach
-- Ideas render themselves via `Draw()` method
-- LineBuffer introduced for editing state
-- v0.1.0 scope limited to horizontal lines only
-
----
-
-## Future Considerations (Post v0.1.0)
-
+**Longer term:**
+- Name resolution and references
+- Type checking and semantic propagation
+- Edit ideas for in-place editing
 - Viewport culling for large sources
-- Incremental parsing (only re-parse changed lines)
+- Incremental parsing
 - Visual indent guides
-- Collapsible tree sections
-- Metadata display (hover for type info, etc.)
-- Animation hints (e.g., evaluation progress)
+- Collapsible sections
 - Multiple cursors
 - Selection and clipboard
