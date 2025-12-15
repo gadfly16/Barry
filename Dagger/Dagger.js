@@ -11,7 +11,7 @@ const Color = {
   Middle: "#8e8f91",
   Dark: "#1c1d21",
   Aqua: "#51dbe5",
-  Blue: "#3d6cff",
+  Blue: "#396cff",
   Brown: "#6f5700",
   Violet: "#ce51e4",
   Yellow: "#d6e26e",
@@ -79,9 +79,9 @@ const Style = {
   },
 
   Label: (cctx, text, x, y) => {
-    cctx.fillStyle = Color.Sky
-    cctx.fillText(text, x, y)
     cctx.fillStyle = Color.Blue
+    cctx.fillText(text, x, y)
+    cctx.fillStyle = Color.Sky
     cctx.fillText(": ", x + text.length * charWidth, y)
     return text.length + 2
   },
@@ -195,12 +195,10 @@ const NameMap = new Map()
 
 // Parser extracts tokens on-demand and creates ideas from input string
 class Parser {
-  constructor() {
-    this.regex = new RegExp(TOKEN_PATTERN.source, TOKEN_PATTERN.flags)
-    this.input = ""
-    this.fresh = false
-    this.tokens = []
-  }
+  regex = new RegExp(TOKEN_PATTERN.source, TOKEN_PATTERN.flags)
+  input = ""
+  fresh = false
+  tokens = []
 
   // Parse a seal string and return the longest matching seal idea
   parseSeal(sealString, matchEndPos) {
@@ -402,30 +400,27 @@ class Parser {
 
 // Base class for all ideas
 class Idea {
-  constructor() {
-    this.lBind = Bind.NonBinding
-    this.rBind = Bind.NonBinding
-    this.jam = null
-    this.baseColor = Color.Black
-  }
+  lBind = Bind.NonBinding
+  rBind = Bind.NonBinding
+  jam = null
+  baseColor = Color.Black
 
   Color() {
     if (this.jam !== null) return Color.Red
     return this.baseColor
   }
 
-  Status(ctx) {
-    ctx.write(this.kind, Style.Unquoted)
-    this.JamInfo(ctx)
-
+  Status(wctx) {
+    wctx.Write(this.kind, Style.Unquoted)
+    this.JamInfo(wctx)
     const result = this.Eval()
-    ctx.write(" => ", Style.Operator)
-    ctx.write(result.View(), Style.Unquoted)
+    wctx.Write(" => ", Style.Operator)
+    wctx.Write(result.View(), Style.Unquoted)
   }
 
-  JamInfo(ctx) {
+  JamInfo(wctx) {
     if (this.jam !== null) {
-      ctx.write(' !"' + this.jam + '"', Style.Jam)
+      wctx.Write(' !"' + this.jam + '"', Style.Jam)
     }
   }
 
@@ -436,10 +431,11 @@ class Idea {
 
 // Op - base class for operators
 class Op extends Idea {
+  complete = false
+  baseColor = Color.Violet
+
   constructor() {
     super()
-    this.complete = false
-    this.baseColor = Color.Violet
   }
 
   consumePre(prev) {
@@ -456,11 +452,13 @@ class Value extends Idea {
 
 // Num idea - stores numeric values
 class Num extends Value {
+  kind = Kind.Num
+  returnKind = Kind.Num
+  baseColor = Color.Mint
+  value
+
   constructor(match) {
     super()
-    this.kind = Kind.Num
-    this.returnKind = Kind.Num
-    this.baseColor = Color.Mint
     this.value = typeof match === "string" ? parseFloat(match) : match
   }
 
@@ -468,18 +466,20 @@ class Num extends Value {
     return this.value.toString()
   }
 
-  Write(ctx) {
-    ctx.write(this.View(), Style.Number, this)
+  Write(wctx) {
+    wctx.Write(this.View(), Style.Number, this)
   }
 }
 
 // Str idea - stores string values
 class Str extends Value {
+  kind = Kind.Str
+  returnKind = Kind.Str
+  baseColor = Color.Aqua
+  value
+
   constructor(match) {
     super()
-    this.kind = Kind.Str
-    this.returnKind = Kind.Str
-    this.baseColor = Color.Aqua
     this.value = match
   }
 
@@ -487,18 +487,20 @@ class Str extends Value {
     return '"' + this.value + '"'
   }
 
-  Write(ctx) {
-    ctx.write(this.value, Style.String, this)
+  Write(wctx) {
+    wctx.Write(this.value, Style.String, this)
   }
 }
 
 // Unquoted idea - stores unquoted string values
 class Unquoted extends Value {
+  kind = Kind.Unquoted
+  returnKind = Kind.Unquoted
+  baseColor = Color.Pink
+  value
+
   constructor(match) {
     super()
-    this.kind = Kind.Unquoted
-    this.returnKind = Kind.Unquoted
-    this.baseColor = Color.Pink
     this.value = match
   }
 
@@ -506,22 +508,23 @@ class Unquoted extends Value {
     return this.value
   }
 
-  Write(ctx) {
-    ctx.write(this.View(), Style.Unquoted, this)
+  Write(wctx) {
+    wctx.Write(this.View(), Style.Unquoted, this)
   }
 }
 
 // Label idea - marks a value with a name (infix colon operator)
 class Label extends Op {
+  kind = Kind.Label
+  returnKind = Kind.Label
+  baseColor = Color.Blue
+  name = null
+  labeled = null
+  lBind = Bind.LabelLeft
+  rBind = Bind.LabelRight
+
   constructor() {
     super()
-    this.kind = Kind.Label
-    this.returnKind = Kind.Label
-    this.baseColor = Color.Blue
-    this.name = null
-    this.labeled = null
-    this.lBind = Bind.LabelLeft
-    this.rBind = Bind.LabelRight
   }
 
   consumePre(prev) {
@@ -547,16 +550,16 @@ class Label extends Op {
     return nameStr + ":" + labeledStr
   }
 
-  Write(ctx) {
+  Write(wctx) {
     if (this.name !== null) {
-      ctx.write(this.name, Style.Label, this)
+      wctx.Write(this.name, Style.Label, this)
     } else {
-      ctx.write("_", Style.Label, this)
+      wctx.Write("_", Style.Label, this)
     }
     if (this.labeled !== null) {
-      this.labeled.Write(ctx)
+      this.labeled.Write(wctx)
     } else {
-      ctx.write("_", Style.Blank, this)
+      wctx.Write("_", Style.Blank, this)
     }
   }
 
@@ -567,31 +570,33 @@ class Label extends Op {
     return this.labeled.Eval()
   }
 
-  Status(ctx) {
-    ctx.write("Label ", Style.Unquoted)
+  Status(wctx) {
+    wctx.Write("Label ", Style.Unquoted)
     if (this.name !== null) {
-      ctx.write(this.name, Style.Label)
+      wctx.Write(this.name, Style.Label)
     } else {
-      ctx.write("_:", Style.Label)
+      wctx.Write("_:", Style.Label)
     }
-    this.JamInfo(ctx)
-    ctx.write(" => ", Style.Operator)
+    this.JamInfo(wctx)
+    wctx.Write(" => ", Style.Operator)
     const result = this.Eval()
-    ctx.write(result.View(), Style.Unquoted)
+    wctx.Write(result.View(), Style.Unquoted)
   }
 }
 
 // List idea - contains sequence of ideas
 class List extends Value {
+  kind = Kind.List
+  returnKind = Kind.List
+  baseColor = Color.Sky
+  items = []
+  labelMap = new Map()
+  breakpoint = -1
+  implicit
+
   constructor(isLine = false) {
     super()
-    this.kind = Kind.List
     this.implicit = isLine
-    this.returnKind = Kind.List
-    this.baseColor = Color.Sky
-    this.items = []
-    this.labelMap = new Map()
-    this.breakpoint = -1
   }
 
   append(idea) {
@@ -625,112 +630,116 @@ class List extends Value {
     return result
   }
 
-  Write(ctx) {
+  Write(wctx) {
     const showParens =
-      !ctx.lineStart ||
+      !wctx.lineStart ||
       (this.breakpoint !== 0 &&
         this.items.length > 0 &&
         this.items[0] instanceof Label)
 
     if (showParens) {
-      ctx.write("(", Style.List, this)
+      wctx.Write("(", Style.List, this)
     } else if (this.breakpoint === -1) {
-      ctx.lineStart = false
+      wctx.lineStart = false
     }
 
     if (this.breakpoint === 0) {
       // Vertical layout
       for (let i = 0; i < this.items.length; i++) {
-        if (!ctx.inSourceBounds()) break
-        this.items[i].Write(ctx)
-        ctx.newLine()
+        if (!wctx.inSourceBounds()) break
+        this.items[i].Write(wctx)
+        wctx.newLine()
       }
     } else {
       // Horizontal layout
       for (let i = 0; i < this.items.length; i++) {
-        this.items[i].Write(ctx)
+        this.items[i].Write(wctx)
         if (i < this.items.length - 1) {
-          ctx.write(" ", Style.List, this)
+          wctx.Write(" ", Style.List, this)
         }
       }
     }
 
     if (showParens) {
-      ctx.write(")", Style.List, this)
+      wctx.Write(")", Style.List, this)
     }
   }
 
-  Status(ctx) {
-    ctx.write("List ", Style.Unquoted)
-    ctx.write("#" + this.items.length + " ", Style.Number)
+  Status(wctx) {
+    wctx.Write("List ", Style.Unquoted)
+    wctx.Write("#" + this.items.length + " ", Style.Number)
     const result = this.Eval()
-    ctx.write(" => ", Style.Operator)
-    ctx.write(result.View(), Style.Unquoted)
+    wctx.Write(" => ", Style.Operator)
+    wctx.Write(result.View(), Style.Unquoted)
   }
 }
 
 // Nothing idea - empty expression
 class Nothing extends Value {
+  kind = Kind.Nothing
+  returnKind = Kind.Nothing
+  baseColor = Color.Middle
+
   constructor() {
     super()
-    this.kind = Kind.Nothing
-    this.returnKind = Kind.Nothing
-    this.baseColor = Color.Middle
   }
 
   View() {
     return "()"
   }
 
-  Write(ctx) {
-    ctx.write(this.View(), Style.Nothing, this)
+  Write(wctx) {
+    wctx.Write(this.View(), Style.Nothing, this)
   }
 }
 
 // Closure idea - closing parenthesis marker
 class Closure extends Idea {
+  kind = Kind.Nothing
+  returnKind = Kind.Nothing
+
   constructor() {
     super()
-    this.kind = Kind.Nothing
-    this.returnKind = Kind.Nothing
   }
 
   View() {
     throw new Error("Closure should never appear in AST")
   }
 
-  Write(ctx) {
+  Write(wctx) {
     throw new Error("Closure should never appear in AST")
   }
 }
 
 // Blank idea - represents missing/undefined values
 class Blank extends Idea {
+  kind = Kind.Blank
+  returnKind = Kind.Blank
+
   constructor() {
     super()
-    this.kind = Kind.Blank
-    this.returnKind = Kind.Blank
   }
 
   View() {
     return "_"
   }
 
-  Write(ctx) {
-    ctx.write("_", Style.Blank, this)
+  Write(wctx) {
+    wctx.Write("_", Style.Blank, this)
   }
 }
 
 // Add idea - addition operator
 class Add extends Op {
+  kind = Kind.Add
+  returnKind = Kind.Operator
+  left = null
+  right = null
+  lBind = Bind.Additive
+  rBind = Bind.Additive
+
   constructor() {
     super()
-    this.kind = Kind.Add
-    this.returnKind = Kind.Operator
-    this.left = null
-    this.right = null
-    this.lBind = Bind.Additive
-    this.rBind = Bind.Additive
   }
 
   consumePre(prev) {
@@ -772,41 +781,42 @@ class Add extends Op {
     return new Blank()
   }
 
-  Write(ctx) {
+  Write(wctx) {
     if (this.left !== null) {
       const needsParens =
         (this.left.rBind > Bind.NonBinding && this.left.rBind < this.lBind) ||
         this.left instanceof Label
-      if (needsParens) ctx.write("(", Style.Number, this)
-      this.left.Write(ctx)
-      if (needsParens) ctx.write(")", Style.Number, this)
+      if (needsParens) wctx.Write("(", Style.Number, this)
+      this.left.Write(wctx)
+      if (needsParens) wctx.Write(")", Style.Number, this)
     } else {
-      ctx.write("_", Style.Blank, this)
+      wctx.Write("_", Style.Blank, this)
     }
-    ctx.write("+", Style.Operator, this)
+    wctx.Write("+", Style.Operator, this)
     if (this.right !== null) {
       const needsParens =
         (this.right.lBind > Bind.NonBinding && this.right.lBind < this.rBind) ||
         this.right instanceof Label
-      if (needsParens) ctx.write("(", Style.Number, this)
-      this.right.Write(ctx)
-      if (needsParens) ctx.write(")", Style.Number, this)
+      if (needsParens) wctx.Write("(", Style.Number, this)
+      this.right.Write(wctx)
+      if (needsParens) wctx.Write(")", Style.Number, this)
     } else {
-      ctx.write("_", Style.Blank, this)
+      wctx.Write("_", Style.Blank, this)
     }
   }
 }
 
 // Mul idea - multiplication operator
 class Mul extends Op {
+  kind = Kind.Mul
+  returnKind = Kind.Operator
+  left = null
+  right = null
+  lBind = Bind.Multiplicative
+  rBind = Bind.Multiplicative
+
   constructor() {
     super()
-    this.kind = Kind.Mul
-    this.returnKind = Kind.Operator
-    this.left = null
-    this.right = null
-    this.lBind = Bind.Multiplicative
-    this.rBind = Bind.Multiplicative
   }
 
   consumePre(prev) {
@@ -848,47 +858,51 @@ class Mul extends Op {
     return new Blank()
   }
 
-  Write(ctx) {
+  Write(wctx) {
     if (this.left !== null) {
       const needsParens =
         (this.left.rBind > Bind.NonBinding && this.left.rBind < this.lBind) ||
         this.left instanceof Label
-      if (needsParens) ctx.write("(", Style.Number, this)
-      this.left.Write(ctx)
-      if (needsParens) ctx.write(")", Style.Number, this)
+      if (needsParens) wctx.Write("(", Style.Number, this)
+      this.left.Write(wctx)
+      if (needsParens) wctx.Write(")", Style.Number, this)
     } else {
-      ctx.write("_", Style.Blank, this)
+      wctx.Write("_", Style.Blank, this)
     }
-    ctx.write("*", Style.Operator, this)
+    wctx.Write("*", Style.Operator, this)
     if (this.right !== null) {
       const needsParens =
         (this.right.lBind > Bind.NonBinding && this.right.lBind < this.rBind) ||
         this.right instanceof Label
-      if (needsParens) ctx.write("(", Style.Number, this)
-      this.right.Write(ctx)
-      if (needsParens) ctx.write(")", Style.Number, this)
+      if (needsParens) wctx.Write("(", Style.Number, this)
+      this.right.Write(wctx)
+      if (needsParens) wctx.Write(")", Style.Number, this)
     } else {
-      ctx.write("_", Style.Blank, this)
+      wctx.Write("_", Style.Blank, this)
     }
   }
 }
 
 // === Console & Rendering ===
 
-// DrawContext - provides drawing operations for ideas
-class DrawContext {
+// WriteContext - provides drawing operations for ideas
+class WriteContext {
+  col = 1
+  row = 1
+  lineStart = true
+  ideaUnderCursor = null
+  console
+  targetCol
+  targetRow
+
   constructor(console, targetCol = 0, targetRow = 0) {
     this.console = console
-    this.col = 1
-    this.row = 1
-    this.lineStart = true
     this.targetCol = targetCol
     this.targetRow = targetRow
-    this.ideaUnderCursor = null
   }
 
   // Write text at current position using a style function
-  write(text, style, idea = null) {
+  Write(text, style, idea = null) {
     // Calculate pixel coordinates
     const x = (this.col - 1) * charWidth
     const y = (this.row - 1) * charHeight + charHeight / 2
@@ -927,11 +941,30 @@ class DrawContext {
 }
 
 class Console {
+  width = 100
+  height = 30
+  sourceColor = Color.Dark
+  statusBg = Color.Black
+  cursorColor = Color.Middle
+  parser = new Parser()
+  source = new List()
+  prompt = "^..^ "
+  currentLine = ""
+  cursorPosition = 0
+  history = []
+  historyIndex = -1
+  targetCol = -1
+  targetRow = -1
+  sourceStart
+  sourceEnd
+  statusLine
+  cmdLine
+  canvas
+  ctx
+
   constructor(canvasId) {
     StyleInit()
 
-    this.width = 100
-    this.height = 30
     this.sourceStart = 1
     this.sourceEnd = this.height - 2
     this.statusLine = this.height - 1
@@ -946,29 +979,7 @@ class Console {
       throw new Error("Failed to get 2D context")
     }
     this.ctx = ctx
-
-    // Colors
-    this.sourceColor = Color.Dark
-    this.statusBg = Color.Black
-    this.cursorColor = Color.Middle
-
-    // Parser
-    this.parser = new Parser()
-
-    // Source
-    this.source = new List()
     this.source.breakpoint = 0
-
-    // Input state
-    this.prompt = "^..^ "
-    this.currentLine = ""
-    this.cursorPosition = 0
-    this.history = []
-    this.historyIndex = -1
-
-    // Mouse tracking
-    this.targetCol = -1
-    this.targetRow = -1
 
     this.initialize()
     this.setupKeyboardListeners()
@@ -1032,15 +1043,15 @@ class Console {
 
   drawSource() {
     this.clearSource()
-    const ctx = new DrawContext(this, this.targetCol, this.targetRow)
-    this.source.Write(ctx)
+    const wctx = new WriteContext(this, this.targetCol, this.targetRow)
+    this.source.Write(wctx)
 
-    if (ctx.ideaUnderCursor !== null) {
+    if (wctx.ideaUnderCursor !== null) {
       this.clearStatus()
-      const statusCtx = new DrawContext(this)
-      statusCtx.row = this.statusLine
-      statusCtx.col = 2
-      ctx.ideaUnderCursor.Status(statusCtx)
+      const statusWctx = new WriteContext(this)
+      statusWctx.row = this.statusLine
+      statusWctx.col = 2
+      wctx.ideaUnderCursor.Status(statusWctx)
     }
   }
 
@@ -1276,13 +1287,6 @@ class Console {
   redrawCommandLine() {
     this.parser.start(this.currentLine)
     const tokens = this.parser.tokens
-
-    // console.log("Tokens for:", this.currentLine)
-    // tokens.forEach((t, i) => {
-    //   console.log(
-    //     `  [${i}] endIndex: ${t.endIndex}, idea: ${t.idea.constructor.name}, text: "${this.currentLine.slice(i === 0 ? 0 : tokens[i - 1].endIndex, t.endIndex)}"`,
-    //   )
-    // })
 
     const fullText = this.prompt + this.currentLine
     const cursorCol = this.prompt.length + this.cursorPosition + 1
