@@ -103,12 +103,12 @@ const Style = {
     return 1
   },
 
-  Append: (w, _) => {
+  Push: (w, _) => {
     w.cc.fillText(" ", w.cx, w.cy)
     return 1
   },
 
-  Closure: (w, _) => {
+  Close: (w, _) => {
     w.cc.fillStyle = Color.Sky
     w.cc.fillText(")", w.cx, w.cy)
     return 1
@@ -176,7 +176,7 @@ const Kind = {
 // Bind values (precedence)
 const Bind = {
   NonBinding: 0,
-  Append: 1,
+  Push: 1,
   LabelRight: 2,
   Additive: 3,
   Multiplicative: 4,
@@ -185,7 +185,7 @@ const Bind = {
 
 // Combined regex pattern for token matching
 const TOKEN_PATTERN =
-  /(?:"(?<quoted>[^"]*)"|(?<list>\()|(?<closure>\))|(?<number>-?\d+\.?\d*)|(?<seal>[^\w\s"()]+)|(?<unquoted>[^:\s]+)|(?<append>\s+))/g
+  /(?:"(?<quoted>[^"]*)"|(?<list>\()|(?<close>\))|(?<number>-?\d+\.?\d*)|(?<seal>[^\w\s"()]+)|(?<unquoted>[^:\s]+)|(?<push>\s+))/g
 
 // Seal map - maps seal strings to their idea constructors
 const SealMap = new Map([
@@ -251,7 +251,7 @@ class Parser {
     this.tokens = []
     this.fresh = true
 
-    const result = this.next(null, Bind.Append)
+    const result = this.next(null, Bind.Push)
     return result ?? new Nothing()
   }
 
@@ -272,7 +272,7 @@ class Parser {
     } else {
       let match = this.regex.exec(this.input)
 
-      while (match && match.groups?.append !== undefined) {
+      while (match && match.groups?.push !== undefined) {
         match = this.regex.exec(this.input)
       }
 
@@ -287,8 +287,8 @@ class Parser {
         idea = new Str(match.groups.quoted)
       } else if (match.groups.list !== undefined) {
         idea = new List()
-      } else if (match.groups.closure !== undefined) {
-        idea = new Closure()
+      } else if (match.groups.close !== undefined) {
+        idea = new Close()
       } else if (match.groups.unquoted !== undefined) {
         if (NameMap.has(match.groups.unquoted)) {
           idea = NameMap.get(match.groups.unquoted)()
@@ -302,7 +302,7 @@ class Parser {
         return null
       }
 
-      if (!(idea instanceof Closure)) {
+      if (!(idea instanceof Close)) {
         this.tokens.push({
           endIndex: this.regex.lastIndex,
           idea: idea,
@@ -333,7 +333,7 @@ class Parser {
       }
     }
 
-    if (idea instanceof Closure) {
+    if (idea instanceof Close) {
       return idea
     }
 
@@ -355,14 +355,14 @@ class Parser {
     if (idea instanceof List) {
       let list = idea
       while (true) {
-        let item = this.next(null, Bind.Append)
+        let item = this.next(null, Bind.Push)
         if (item === null) break
-        if (item instanceof Closure) {
+        if (item instanceof Close) {
           if (list.implicit) {
             const nll = new List()
             nll.implicit = true
             list.implicit = false
-            nll.append(list)
+            nll.push(list)
             this.tokens.push({
               endIndex: this.regex.lastIndex,
               idea: list,
@@ -377,7 +377,7 @@ class Parser {
             break
           }
         }
-        list.append(item)
+        list.push(item)
       }
 
       // Apply single element rule
@@ -613,7 +613,7 @@ class List extends Value {
     this.implicit = isLine
   }
 
-  append(idea) {
+  push(idea) {
     this.items.push(idea)
 
     if (idea instanceof Label && idea.name !== null) {
@@ -635,7 +635,7 @@ class List extends Value {
   Eval() {
     const result = new List()
     for (const item of this.items) {
-      result.append(item.Eval())
+      result.push(item.Eval())
     }
     return result
   }
@@ -665,13 +665,13 @@ class List extends Value {
       for (let i = 0; i < this.items.length; i++) {
         this.items[i].Write(wctx)
         if (i < this.items.length - 1) {
-          wctx.Write(Style.Append, this)
+          wctx.Write(Style.Push, this)
         }
       }
     }
 
     if (showParens) {
-      wctx.Write(Style.Closure, this)
+      wctx.Write(Style.Close, this)
     }
   }
 
@@ -689,17 +689,17 @@ class List extends Value {
   }
 }
 
-// Closure idea - closing parenthesis marker
-class Closure extends Idea {
+// Close idea - closing parenthesis marker
+class Close extends Idea {
   kind = Kind.Nothing
   returnKind = Kind.Nothing
 
   Str() {
-    throw new Error("Closure should never appear in AST")
+    throw new Error("Close should never appear in AST")
   }
 
   Write(wctx) {
-    throw new Error("Closure should never appear in AST")
+    throw new Error("Close should never appear in AST")
   }
 }
 
@@ -795,7 +795,7 @@ class Add extends Op {
         this.left instanceof Label
       if (needsParens) wctx.Write(Style.List, this.left)
       this.left.Write(wctx)
-      if (needsParens) wctx.Write(Style.Closure, this.left)
+      if (needsParens) wctx.Write(Style.Close, this.left)
     } else {
       wctx.Write(Style.Blank, this)
     }
@@ -806,7 +806,7 @@ class Add extends Op {
         this.right instanceof Label
       if (needsParens) wctx.Write(Style.List, this.right)
       this.right.Write(wctx)
-      if (needsParens) wctx.Write(Style.Closure, this.right)
+      if (needsParens) wctx.Write(Style.Close, this.right)
     } else {
       wctx.Write(Style.Blank, this)
     }
@@ -872,7 +872,7 @@ class Mul extends Op {
         this.left instanceof Label
       if (needsParens) wctx.Write(Style.List, this.left)
       this.left.Write(wctx)
-      if (needsParens) wctx.Write(Style.Closure, this.left)
+      if (needsParens) wctx.Write(Style.Close, this.left)
     } else {
       wctx.Write(Style.Blank, this)
     }
@@ -883,7 +883,7 @@ class Mul extends Op {
         this.right instanceof Label
       if (needsParens) wctx.Write(Style.List, this.right)
       this.right.Write(wctx)
-      if (needsParens) wctx.Write(Style.Closure, this.right)
+      if (needsParens) wctx.Write(Style.Close, this.right)
     } else {
       wctx.Write(Style.Blank, this)
     }
@@ -968,7 +968,7 @@ class Console {
   sourceStart
   sourceEnd
   statusLine
-  cmdLine
+  shell
   canvas
   ctx
 
@@ -978,7 +978,7 @@ class Console {
     this.sourceStart = 1
     this.sourceEnd = this.height - 2
     this.statusLine = this.height - 1
-    this.cmdLine = this.height
+    this.shell = this.height
 
     // Canvas
     const canvas = document.getElementById(canvasId)
@@ -991,7 +991,7 @@ class Console {
     this.initialize()
     this.setupKeyboardListeners()
     this.setupMouseListeners()
-    this.redrawCommandLine()
+    this.drawShell()
   }
 
   initialize() {
@@ -1024,9 +1024,9 @@ class Console {
     this.ctx.fillRect(0, y, this.canvas.width, height)
   }
 
-  clearCommand() {
+  clearShell() {
     this.ctx.fillStyle = this.sourceColor
-    const y = (this.cmdLine - 1) * hchar
+    const y = (this.shell - 1) * hchar
     const height = hchar
     this.ctx.fillRect(0, y, this.canvas.width, height)
   }
@@ -1074,25 +1074,6 @@ class Console {
         this.source.Status(statusWctx)
       }
     }
-  }
-
-  drawCommandLine(text, tokens, cursorPos) {
-    this.clearCommand()
-
-    let startPos = 1
-    for (const token of tokens) {
-      const endPos = token.endIndex + 1
-      const tokenText = text.slice(startPos - 1, endPos - 1)
-      const color = token.idea.Color()
-      this.drawText(tokenText, startPos, this.cmdLine, color)
-      startPos = endPos
-    }
-
-    if (startPos <= text.length) {
-      this.drawText(text.slice(startPos - 1), startPos, this.cmdLine, "#6c7086")
-    }
-
-    this.drawCursor(cursorPos, this.cmdLine)
   }
 
   drawCursor(col, row) {
@@ -1189,7 +1170,7 @@ class Console {
       char +
       this.currentLine.slice(this.cursorPosition)
     this.cursorPosition++
-    this.redrawCommandLine()
+    this.drawShell()
   }
 
   handleBackspace() {
@@ -1198,7 +1179,7 @@ class Console {
         this.currentLine.slice(0, this.cursorPosition - 1) +
         this.currentLine.slice(this.cursorPosition)
       this.cursorPosition--
-      this.redrawCommandLine()
+      this.drawShell()
     }
   }
 
@@ -1207,21 +1188,21 @@ class Console {
       this.currentLine =
         this.currentLine.slice(0, this.cursorPosition) +
         this.currentLine.slice(this.cursorPosition + 1)
-      this.redrawCommandLine()
+      this.drawShell()
     }
   }
 
   handleArrowLeft() {
     if (this.cursorPosition > 0) {
       this.cursorPosition--
-      this.redrawCommandLine()
+      this.drawShell()
     }
   }
 
   handleArrowRight() {
     if (this.cursorPosition < this.currentLine.length) {
       this.cursorPosition++
-      this.redrawCommandLine()
+      this.drawShell()
     }
   }
 
@@ -1236,7 +1217,7 @@ class Console {
 
     this.currentLine = this.history[this.historyIndex]
     this.cursorPosition = this.currentLine.length
-    this.redrawCommandLine()
+    this.drawShell()
   }
 
   handleArrowDown() {
@@ -1251,17 +1232,17 @@ class Console {
     }
 
     this.cursorPosition = this.currentLine.length
-    this.redrawCommandLine()
+    this.drawShell()
   }
 
   handleHome() {
     this.cursorPosition = 0
-    this.redrawCommandLine()
+    this.drawShell()
   }
 
   handleEnd() {
     this.cursorPosition = this.currentLine.length
-    this.redrawCommandLine()
+    this.drawShell()
   }
 
   handleSubmit() {
@@ -1275,7 +1256,7 @@ class Console {
     if (line.trim()) {
       try {
         const result = this.parser.start(line)
-        this.source.append(result)
+        this.source.push(result)
         this.drawSource()
         this.clearStatus()
         const statusWctx = new WriteContext(this)
@@ -1289,22 +1270,34 @@ class Console {
 
     this.currentLine = ""
     this.cursorPosition = 0
-    this.redrawCommandLine()
+    this.drawShell()
   }
 
-  redrawCommandLine() {
+  drawShell() {
     this.parser.start(this.currentLine)
-    const tokens = this.parser.tokens
-
-    const fullText = this.prompt + this.currentLine
-    const cursorCol = this.prompt.length + this.cursorPosition + 1
-
-    const adjustedTokens = tokens.map((t) => ({
+    const text = this.prompt + this.currentLine
+    const cursorPos = this.prompt.length + this.cursorPosition + 1
+    const tokens = this.parser.tokens.map((t) => ({
       endIndex: t.endIndex + this.prompt.length,
       idea: t.idea,
     }))
 
-    this.drawCommandLine(fullText, adjustedTokens, cursorCol)
+    this.clearShell()
+
+    let startPos = 1
+    for (const token of tokens) {
+      const endPos = token.endIndex + 1
+      const tokenText = text.slice(startPos - 1, endPos - 1)
+      const color = token.idea.Color()
+      this.drawText(tokenText, startPos, this.shell, color)
+      startPos = endPos
+    }
+
+    if (startPos <= text.length) {
+      this.drawText(text.slice(startPos - 1), startPos, this.shell, "#6c7086")
+    }
+
+    this.drawCursor(cursorPos, this.shell)
   }
 }
 
