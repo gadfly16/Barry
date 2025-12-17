@@ -14,7 +14,7 @@ const Color = {
   Blue: "#396cff",
   Brown: "#6f5700",
   Violet: "#ce51e4",
-  Yellow: "#d6e23e",
+  Yellow: "#f6d21e",
   Pink: "#ce857a",
   Mint: "#aff188",
   Red: "#f01f1c",
@@ -56,103 +56,128 @@ function StyleInit() {
 }
 
 // Style functions - draw text with specific styling
-// Each function: (canvasCtx, text, x, y) => renderedLength
+// Each function: (w, idea, input) => renderedLength
 const Style = {
-  Num: (w, num) => {
+  Num: (w, num, input) => {
     w.cc.fillStyle = Color.Mint
-    const text = num.value.toString()
-    w.cc.fillText(text, w.cx, w.cy)
-    return text.length
+    if (!input) input = num.value.toString()
+    w.cc.fillText(input, w.cx, w.cy)
+    return input.length
   },
 
-  Str: (w, str) => {
+  Str: (w, str, input) => {
     w.cc.fillStyle = Color.Aqua
     w.cc.font = Font.Italic
-    const text = '"' + str.value + '"'
-    w.cc.fillText(text, w.cx, w.cy)
+    if (!input) input = '"' + str.value + '"'
+    w.cc.fillText(input, w.cx, w.cy)
     w.cc.font = w.base
-    return text.length
+    return input.length
   },
 
-  Unquoted: (w, uq) => {
+  Unquoted: (w, uq, input) => {
     w.cc.fillStyle = Color.Orange
-    w.cc.fillText(uq.value, w.cx, w.cy)
-    return uq.value.length
+    if (!input) input = uq.value
+    w.cc.fillText(input, w.cx, w.cy)
+    return input.length
   },
 
   Tag: (w, idea) => {
-    text = idea.constructor.name
-    w.cc.fillStyle = Color.Green
+    const text = idea.constructor.name
+    w.cc.fillStyle = Color.Yellow
     w.cc.fillText(text + " ", w.cx, w.cy)
-    return idea.constructor.name.length + 1
+    return text.length + 1
   },
 
-  Label: (w, label) => {
-    w.cc.fillStyle = Color.Blue
-    w.cc.font = Font.Italic
-    w.cc.fillText(label.name, w.cx, w.cy)
-    w.cc.font = w.base
+  Label: (w, label, input) => {
+    if (input) {
+      w.cc.fillStyle = Color.Blue
+      w.cc.font = Font.Italic
+      w.cc.fillText(input, w.cx, w.cy)
+      w.cc.font = w.base
+      return input.length
+    } else {
+      w.cc.fillStyle = Color.Blue
+      w.cc.font = Font.Italic
+      w.cc.fillText(label.name, w.cx, w.cy)
+      w.cc.font = w.base
+      w.cc.fillStyle = Color.Sky
+      w.cc.fillText(": ", w.cx + label.name.length * wchar, w.cy)
+      return label.name.length + 2
+    }
+  },
+
+  List: (w, _, input) => {
     w.cc.fillStyle = Color.Sky
-    w.cc.fillText(": ", w.cx + label.name.length * wchar, w.cy)
-    return label.name.length + 2
+    if (!input) input = "("
+    w.cc.fillText(input, w.cx, w.cy)
+    return input.length
   },
 
-  List: (w, _) => {
+  Push: (w, _, input) => {
+    if (!input) input = " "
+    w.cc.fillText(input, w.cx, w.cy)
+    return input.length
+  },
+
+  Close: (w, _, input) => {
     w.cc.fillStyle = Color.Sky
-    w.cc.fillText("(", w.cx, w.cy)
-    return 1
+    if (!input) input = ")"
+    w.cc.fillText(input, w.cx, w.cy)
+    return input.length
   },
 
-  Push: (w, _) => {
-    w.cc.fillText(" ", w.cx, w.cy)
-    return 1
-  },
-
-  Close: (w, _) => {
-    w.cc.fillStyle = Color.Sky
-    w.cc.fillText(")", w.cx, w.cy)
-    return 1
-  },
-
-  Nothing: (w, _) => {
+  Nothing: (w, _, input) => {
     w.cc.fillStyle = Color.Middle
-    w.cc.fillText("()", w.cx, w.cy)
-    return 2
+    if (!input) input = "()"
+    w.cc.fillText(input, w.cx, w.cy)
+    return input.length
   },
 
-  Add: (w, _) => {
+  Add: (w, _, input) => {
     w.cc.fillStyle = Color.Violet
-    w.cc.fillText("+", w.cx, w.cy)
-    return 1
+    if (!input) input = "+"
+    w.cc.fillText(input, w.cx, w.cy)
+    return input.length
   },
 
-  Mul: (w, _) => {
+  Mul: (w, _, input) => {
     w.cc.fillStyle = Color.Violet
-    w.cc.fillText("*", w.cx, w.cy)
-    return 1
+    if (!input) input = "*"
+    w.cc.fillText(input, w.cx, w.cy)
+    return input.length
   },
 
-  Eval: (w, _) => {
-    w.cc.fillStyle = Color.Light
-    w.cc.fillText("=> ", w.cx, w.cy)
-    return 4
+  Eval: (w, _, input) => {
+    w.cc.fillStyle = Color.Green
+    if (!input) input = "=> "
+    w.cc.fillText(input, w.cx, w.cy)
+    return input.length
   },
 
-  Blank: (w, _) => {
+  Blank: (w, _, input) => {
     w.cc.fillStyle = Color.Middle
-    w.cc.fillText("_", w.cx, w.cy)
-    return 1
+    if (!input) input = "_"
+    w.cc.fillText(input, w.cx, w.cy)
+    return input.length
   },
 
-  Jam: (w, text) => {
+  Spaces: (w, spaces, input) => {
+    // Don't call fillText - spaces are rendered as part of adjacent tokens
+    // Just return length to advance cursor position
+    return input.length
+  },
+
+  Jam: (w, _, text) => {
     w.cc.fillStyle = Color.Red
     w.cc.fillText(text, w.cx, w.cy)
     return text.length
   },
 
-  Raw: (w, text) => {
+  Raw: (w, _, text) => {
     w.cc.fillStyle = Color.White
+    w.cc.font = Font.Italic
     w.cc.fillText(text, w.cx, w.cy)
+    w.cc.font = w.base
     return text.length
   },
 }
@@ -202,7 +227,7 @@ class Parser {
   regex = new RegExp(TOKEN_PATTERN.source, TOKEN_PATTERN.flags)
   input = ""
   fresh = false
-  tokens = []
+  tokenMap = []
 
   // Parse a seal string and return the longest matching seal idea
   parseSeal(sealString, matchEndPos) {
@@ -237,10 +262,6 @@ class Parser {
 
     this.regex.lastIndex = matchEndPos - sealString.length + consumedLength
     const unquotedIdea = new Unquoted(unknownBuffer)
-    this.tokens.push({
-      endIndex: this.regex.lastIndex,
-      idea: unquotedIdea,
-    })
     return unquotedIdea
   }
 
@@ -248,7 +269,7 @@ class Parser {
   start(input) {
     this.input = input
     this.regex.lastIndex = 0
-    this.tokens = []
+    this.tokenMap = []
     this.fresh = true
 
     const result = this.next(null, Bind.Push)
@@ -258,10 +279,10 @@ class Parser {
   // Get next idea from current position
   next(prev, suitor) {
     const savedPos = this.regex.lastIndex
-    const savedTokenCount = this.tokens.length
+    const savedTokenCount = this.tokenMap.length
     const rewind = () => {
       this.regex.lastIndex = savedPos
-      this.tokens.length = savedTokenCount
+      this.tokenMap.length = savedTokenCount
     }
 
     let idea = null
@@ -273,6 +294,7 @@ class Parser {
       let match = this.regex.exec(this.input)
 
       while (match && match.groups?.push !== undefined) {
+        this.tokenMap.push([this.regex.lastIndex, new Spaces()])
         match = this.regex.exec(this.input)
       }
 
@@ -303,10 +325,7 @@ class Parser {
       }
 
       if (!(idea instanceof Close)) {
-        this.tokens.push({
-          endIndex: this.regex.lastIndex,
-          idea: idea,
-        })
+        this.tokenMap.push([this.regex.lastIndex, idea])
       }
     }
 
@@ -325,7 +344,7 @@ class Parser {
         idea = consumed
 
         if (idea instanceof Label) {
-          this.tokens.splice(this.tokens.length - 2, 1)
+          this.tokenMap.splice(this.tokenMap.length - 2, 1)
         }
       } else {
         rewind()
@@ -340,8 +359,10 @@ class Parser {
     // Fill recursion
     if ("consumePost" in idea) {
       const postPos = this.regex.lastIndex
+      const postTokenCount = this.tokenMap.length
       const rewindPost = () => {
         this.regex.lastIndex = postPos
+        this.tokenMap.length = postTokenCount
       }
       const nextIdea = this.next(null, idea.rBind)
       if (nextIdea !== null) {
@@ -353,40 +374,33 @@ class Parser {
 
     // Handle List
     if (idea instanceof List) {
-      let list = idea
       while (true) {
         let item = this.next(null, Bind.Push)
         if (item === null) break
         if (item instanceof Close) {
-          if (list.implicit) {
+          if (idea.implicit) {
             const nll = new List()
             nll.implicit = true
-            list.implicit = false
-            nll.push(list)
-            this.tokens.push({
-              endIndex: this.regex.lastIndex,
-              idea: list,
-            })
-            list = nll
+            idea.implicit = false
+            nll.push(idea)
+            this.tokenMap.push([this.regex.lastIndex, idea])
+            idea = nll
             continue
           } else {
-            this.tokens.push({
-              endIndex: this.regex.lastIndex,
-              idea: item,
-            })
+            this.tokenMap.push([this.regex.lastIndex, idea])
             break
           }
         }
-        list.push(item)
+        idea.push(item)
       }
 
       // Apply single element rule
-      if (list.items.length === 0) {
+      if (idea.items.length === 0) {
         idea = new Nothing()
-      } else if (list.items.length === 1) {
-        idea = list.items[0]
+      } else if (idea.items.length === 1) {
+        idea = idea.items[0]
       } else {
-        idea = list
+        idea = idea
       }
     }
 
@@ -407,29 +421,20 @@ class Idea {
   lBind = Bind.NonBinding
   rBind = Bind.NonBinding
   jam = null
-  baseColor = Color.Black
-
-  Color() {
-    if (this.jam !== null) return Color.Red
-    return this.baseColor
-  }
 
   Status(wctx) {
-    wctx.Write(Style.Tag, this)
     this.JamInfo(wctx)
     const result = this.Eval()
     wctx.Write(Style.Eval)
-    wctx.cc.font = Font.Italic
-    wctx.base = Font.Italic
+    wctx.SetBase(Font.Italic)
     wctx.lineStart = true
     result.Write(wctx)
-    wctx.cc.font = Font.Normal
-    wctx.base = Font.Normal
+    wctx.SetBase(Font.Normal)
   }
 
   JamInfo(wctx) {
     if (this.jam !== null) {
-      wctx.Write(' !"' + this.jam + '"', Style.Jam)
+      wctx.Write(Style.Jam, null, ' !"' + this.jam + '"')
     }
   }
 
@@ -441,7 +446,6 @@ class Idea {
 // Op - base class for operators
 class Op extends Idea {
   complete = false
-  baseColor = Color.Violet
 
   constructor() {
     super()
@@ -463,7 +467,7 @@ class Value extends Idea {
 class Num extends Value {
   kind = Kind.Num
   returnKind = Kind.Num
-  baseColor = Color.Mint
+  baseStyle = Style.Num
   value
 
   constructor(match) {
@@ -484,7 +488,7 @@ class Num extends Value {
 class Str extends Value {
   kind = Kind.Str
   returnKind = Kind.Str
-  baseColor = Color.Aqua
+  baseStyle = Style.Str
   value
 
   constructor(match) {
@@ -505,7 +509,7 @@ class Str extends Value {
 class Unquoted extends Value {
   kind = Kind.Unquoted
   returnKind = Kind.Unquoted
-  baseColor = Color.Pink
+  baseStyle = Style.Unquoted
   value
 
   constructor(match) {
@@ -526,7 +530,7 @@ class Unquoted extends Value {
 class Label extends Op {
   kind = Kind.Label
   returnKind = Kind.Label
-  baseColor = Color.Blue
+  baseStyle = Style.Label
   name = null
   labeled = null
   lBind = Bind.LabelLeft
@@ -580,21 +584,18 @@ class Label extends Op {
   }
 
   Status(wctx) {
-    wctx.Write(Style.Tag, this)
     if (this.name !== null) {
       wctx.Write(Style.Label, this)
     } else {
-      wctx.Write(Style.Raw, "_:")
+      wctx.Write(Style.Raw, null, "_:")
     }
     this.JamInfo(wctx)
     wctx.Write(Style.Eval)
     const result = this.Eval()
-    wctx.cc.font = Font.Italic
-    wctx.base = Font.Italic
+    wctx.SetBase(Font.Italic)
     wctx.lineStart = true
     result.Write(wctx)
-    wctx.cc.font = Font.Normal
-    wctx.base = Font.Normal
+    wctx.SetBase(Font.Normal)
   }
 }
 
@@ -602,7 +603,7 @@ class Label extends Op {
 class List extends Value {
   kind = Kind.List
   returnKind = Kind.List
-  baseColor = Color.Sky
+  baseStyle = Style.List
   items = []
   labelMap = new Map()
   breakpoint = -1
@@ -676,16 +677,13 @@ class List extends Value {
   }
 
   Status(wctx) {
-    wctx.Write(Style.Tag, this)
-    wctx.Write(Style.Raw, "#" + this.items.length + " ")
+    wctx.Write(Style.Raw, null, "of " + this.items.length + " ")
     const result = this.Eval()
     wctx.Write(Style.Eval)
-    wctx.cc.font = Font.Italic
-    wctx.base = Font.Italic
+    wctx.SetBase(Font.Italic)
     wctx.lineStart = true
     result.Write(wctx)
-    wctx.cc.font = Font.Normal
-    wctx.base = Font.Normal
+    wctx.SetBase(Font.Normal)
   }
 }
 
@@ -707,7 +705,7 @@ class Close extends Idea {
 class Nothing extends Value {
   kind = Kind.Nothing
   returnKind = Kind.Nothing
-  baseColor = Color.Middle
+  baseStyle = Style.Nothing
 
   constructor() {
     super()
@@ -726,6 +724,7 @@ class Nothing extends Value {
 class Blank extends Idea {
   kind = Kind.Blank
   returnKind = Kind.Blank
+  baseStyle = Style.Blank
 
   Str() {
     return "_"
@@ -736,10 +735,25 @@ class Blank extends Idea {
   }
 }
 
+// Spaces idea - represents whitespace belonging to an Op or List
+class Spaces extends Idea {
+  baseStyle = Style.Spaces
+  owner = null
+
+  Str() {
+    return ""
+  }
+
+  Write(wctx, input) {
+    wctx.Write(Style.Spaces, this, input)
+  }
+}
+
 // Add idea - addition operator
 class Add extends Op {
   kind = Kind.Add
   returnKind = Kind.Operator
+  baseStyle = Style.Add
   left = null
   right = null
   lBind = Bind.Additive
@@ -817,6 +831,7 @@ class Add extends Op {
 class Mul extends Op {
   kind = Kind.Mul
   returnKind = Kind.Operator
+  baseStyle = Style.Mul
   left = null
   right = null
   lBind = Bind.Multiplicative
@@ -913,14 +928,19 @@ class WriteContext {
     this.cc = this.console.ctx
   }
 
+  SetBase(font) {
+    this.base = font
+    this.cc.font = font
+  }
+
   // Write text at current position using a style function
-  Write(style, idea = null) {
+  Write(style, idea = null, input = null) {
     // Calculate pixel coordinates
     this.cx = (this.x - 1) * wchar
     this.cy = (this.y - 1) * hchar + hchar / 2
 
     // Call style function and get rendered length
-    const wlen = style(this, idea)
+    const wlen = style(this, idea, input)
 
     // Cursor detection
     if (idea !== null && typeof idea !== "string" && this.ty === this.y) {
@@ -959,7 +979,7 @@ class Console {
   parser = new Parser()
   source = new List()
   prompt = "^..^ "
-  currentLine = ""
+  shLine = ""
   cursorPosition = 0
   history = []
   historyIndex = -1
@@ -991,6 +1011,7 @@ class Console {
     this.initialize()
     this.setupKeyboardListeners()
     this.setupMouseListeners()
+    this.drawStatus(WelcomeMessage)
     this.drawShell()
   }
 
@@ -1002,33 +1023,8 @@ class Console {
     this.ctx.textBaseline = "middle"
     this.ctx.textAlign = "left"
 
-    this.clear()
-  }
-
-  clear() {
     this.ctx.fillStyle = this.sourceColor
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height)
-  }
-
-  clearSource() {
-    this.ctx.fillStyle = this.sourceColor
-    const y = 0
-    const height = this.sourceEnd * hchar
-    this.ctx.fillRect(0, y, this.canvas.width, height)
-  }
-
-  clearStatus() {
-    this.ctx.fillStyle = this.statusBg
-    const y = (this.statusLine - 1) * hchar
-    const height = hchar
-    this.ctx.fillRect(0, y, this.canvas.width, height)
-  }
-
-  clearShell() {
-    this.ctx.fillStyle = this.sourceColor
-    const y = (this.shell - 1) * hchar
-    const height = hchar
-    this.ctx.fillRect(0, y, this.canvas.width, height)
   }
 
   drawText(text, col, row, color) {
@@ -1043,36 +1039,83 @@ class Console {
     this.ctx.fillText(text, x, y)
   }
 
-  drawStatus(text) {
-    this.clearStatus()
-    this.drawText(text, 1, this.statusLine, this.cursorColor)
+  drawStatus(idea) {
+    this.ctx.fillStyle = this.statusBg
+    this.ctx.fillRect(
+      0,
+      (this.statusLine - 1) * hchar,
+      this.canvas.width,
+      hchar,
+    )
+    const statusWctx = new WriteContext(this)
+    statusWctx.y = this.statusLine
+    statusWctx.x = 2
+    statusWctx.Write(Style.Tag, idea)
+    idea.Status(statusWctx)
   }
 
   drawSource() {
-    this.clearSource()
+    this.ctx.fillStyle = this.sourceColor
+    this.ctx.fillRect(0, 0, this.canvas.width, this.sourceEnd * hchar)
     const wctx = new WriteContext(this, this.targetCol, this.targetRow)
     this.source.Write(wctx)
 
     if (wctx.ideaUnderCursor !== null) {
-      this.clearStatus()
-      const statusWctx = new WriteContext(this)
-      statusWctx.y = this.statusLine
-      statusWctx.x = 2
-      wctx.ideaUnderCursor.Status(statusWctx)
+      this.drawStatus(wctx.ideaUnderCursor)
     } else if (
       this.targetRow >= this.sourceStart &&
       this.targetRow <= this.sourceEnd
     ) {
       const index = this.targetRow - 1
-      this.clearStatus()
-      const statusWctx = new WriteContext(this)
-      statusWctx.y = this.statusLine
-      statusWctx.x = 2
       if (index < this.source.items.length) {
-        this.source.items[index].Status(statusWctx)
+        this.drawStatus(this.source.items[index])
       } else {
-        this.source.Status(statusWctx)
+        this.drawStatus(this.source)
       }
+    }
+  }
+
+  drawShell() {
+    const result = this.parser.start(this.shLine)
+    this.ctx.fillStyle = this.sourceColor
+    this.ctx.fillRect(0, (this.shell - 1) * hchar, this.canvas.width, hchar)
+
+    // Create WriteContext with cursor detection
+    const wctx = new WriteContext(this, this.targetCol, this.targetRow)
+    wctx.y = this.shell
+    wctx.x = 1
+
+    // Draw prompt
+    wctx.Write(Style.Raw, null, this.prompt)
+
+    // Draw tokens starting after prompt
+    let startIdx = 0
+
+    console.log(this.parser.tokenMap)
+
+    for (const [endIdx, idea] of this.parser.tokenMap) {
+      const tokenText = this.shLine.slice(startIdx, endIdx)
+      wctx.Write(idea.baseStyle, idea, tokenText)
+      startIdx = endIdx
+    }
+
+    // Draw remaining unparsed text
+    if (startIdx < this.shLine.length) {
+      wctx.Write(Style.Raw, null, this.shLine.slice(startIdx))
+    }
+
+    // Draw cursor
+    const cursorPos = this.prompt.length + this.cursorPosition + 1
+    this.drawCursor(cursorPos, this.shell)
+
+    // Show status
+    if (wctx.ideaUnderCursor !== null) {
+      this.drawStatus(wctx.ideaUnderCursor)
+    } else if (
+      this.targetRow === this.shell &&
+      this.targetCol > this.prompt.length + this.shLine.length
+    ) {
+      this.drawStatus(result)
     }
   }
 
@@ -1107,7 +1150,11 @@ class Console {
     this.targetCol = col
     this.targetRow = row
 
-    this.drawSource()
+    if (row >= this.sourceStart && row <= this.sourceEnd) {
+      this.drawSource()
+    } else if (row === this.shell) {
+      this.drawShell()
+    }
   }
 
   handleKeyDown(e) {
@@ -1165,29 +1212,29 @@ class Console {
   }
 
   handleCharacterInput(char) {
-    this.currentLine =
-      this.currentLine.slice(0, this.cursorPosition) +
+    this.shLine =
+      this.shLine.slice(0, this.cursorPosition) +
       char +
-      this.currentLine.slice(this.cursorPosition)
+      this.shLine.slice(this.cursorPosition)
     this.cursorPosition++
     this.drawShell()
   }
 
   handleBackspace() {
     if (this.cursorPosition > 0) {
-      this.currentLine =
-        this.currentLine.slice(0, this.cursorPosition - 1) +
-        this.currentLine.slice(this.cursorPosition)
+      this.shLine =
+        this.shLine.slice(0, this.cursorPosition - 1) +
+        this.shLine.slice(this.cursorPosition)
       this.cursorPosition--
       this.drawShell()
     }
   }
 
   handleDelete() {
-    if (this.cursorPosition < this.currentLine.length) {
-      this.currentLine =
-        this.currentLine.slice(0, this.cursorPosition) +
-        this.currentLine.slice(this.cursorPosition + 1)
+    if (this.cursorPosition < this.shLine.length) {
+      this.shLine =
+        this.shLine.slice(0, this.cursorPosition) +
+        this.shLine.slice(this.cursorPosition + 1)
       this.drawShell()
     }
   }
@@ -1200,7 +1247,7 @@ class Console {
   }
 
   handleArrowRight() {
-    if (this.cursorPosition < this.currentLine.length) {
+    if (this.cursorPosition < this.shLine.length) {
       this.cursorPosition++
       this.drawShell()
     }
@@ -1215,8 +1262,8 @@ class Console {
       this.historyIndex--
     }
 
-    this.currentLine = this.history[this.historyIndex]
-    this.cursorPosition = this.currentLine.length
+    this.shLine = this.history[this.historyIndex]
+    this.cursorPosition = this.shLine.length
     this.drawShell()
   }
 
@@ -1225,13 +1272,13 @@ class Console {
 
     if (this.historyIndex < this.history.length - 1) {
       this.historyIndex++
-      this.currentLine = this.history[this.historyIndex]
+      this.shLine = this.history[this.historyIndex]
     } else {
       this.historyIndex = -1
-      this.currentLine = ""
+      this.shLine = ""
     }
 
-    this.cursorPosition = this.currentLine.length
+    this.cursorPosition = this.shLine.length
     this.drawShell()
   }
 
@@ -1241,63 +1288,29 @@ class Console {
   }
 
   handleEnd() {
-    this.cursorPosition = this.currentLine.length
+    this.cursorPosition = this.shLine.length
     this.drawShell()
   }
 
   handleSubmit() {
-    const line = this.currentLine
-
-    if (line.trim().length > 0) {
-      this.history.push(line)
-      this.historyIndex = -1
-    }
+    const line = this.shLine
 
     if (line.trim()) {
+      this.history.push(line)
+      this.historyIndex = -1
       try {
         const result = this.parser.start(line)
         this.source.push(result)
         this.drawSource()
-        this.clearStatus()
-        const statusWctx = new WriteContext(this)
-        statusWctx.y = this.statusLine
-        statusWctx.x = 2
-        result.Status(statusWctx)
+        this.drawStatus(result)
       } catch (error) {
-        this.drawStatus("Error: " + error.message)
+        console.log("Error:", error.message)
       }
     }
 
-    this.currentLine = ""
+    this.shLine = ""
     this.cursorPosition = 0
     this.drawShell()
-  }
-
-  drawShell() {
-    this.parser.start(this.currentLine)
-    const text = this.prompt + this.currentLine
-    const cursorPos = this.prompt.length + this.cursorPosition + 1
-    const tokens = this.parser.tokens.map((t) => ({
-      endIndex: t.endIndex + this.prompt.length,
-      idea: t.idea,
-    }))
-
-    this.clearShell()
-
-    let startPos = 1
-    for (const token of tokens) {
-      const endPos = token.endIndex + 1
-      const tokenText = text.slice(startPos - 1, endPos - 1)
-      const color = token.idea.Color()
-      this.drawText(tokenText, startPos, this.shell, color)
-      startPos = endPos
-    }
-
-    if (startPos <= text.length) {
-      this.drawText(text.slice(startPos - 1), startPos, this.shell, "#6c7086")
-    }
-
-    this.drawCursor(cursorPos, this.shell)
   }
 }
 
@@ -1312,7 +1325,6 @@ async function initDagger() {
   }
 
   const con = new Console("console-canvas")
-  con.drawStatus("Dagger v0.0.0 - Ready")
 }
 
 if (document.readyState === "loading") {
@@ -1321,5 +1333,5 @@ if (document.readyState === "loading") {
   initDagger()
 }
 
-// Singleton ideas for writing ideas not on the IT
-const wblank = new Blank()
+// Constants
+const WelcomeMessage = new Str("Dagger v0.0.0 - An ICE for Barry")
